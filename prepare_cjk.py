@@ -18,7 +18,10 @@ fontforge_script.py が --region 指定時に JP_FONT の代わりに読む。
    (ハングルが全地域に入るのはこの規則の帰結)
 3. GSUB は主地域のものだけを残す。補入元の GSUB / GPOS は捨てる。
    漢字に locl は入れない (地域別サブフォントで出し分ける方針)。
-4. TrueType 命令は既定で落とす。理由は 2 つ。
+4. build.ini の REGENERATED_STYLES に挙がった (地域, ウェイト) は
+   IBM 発布件ではなく regen_sc_text.py が母版から作り直したものを読む。
+   現状は SC の Text だけ (発布件は補間位置 425 で JP / TC より約 5% 細い)。
+5. TrueType 命令は既定で落とす。理由は 2 つ。
    - ヒンティングは後段の ttfautohint が英数字側に付ける (上流 PlemolJP と同じ)
    - KR 原本は fpgm/prep/cvt を前提にした命令を持つため、補入先に
      そのまま持ち込むと壊れる。落とせば全地域でハングルのグリフが
@@ -475,23 +478,40 @@ def main() -> int:
 
     hangul = config.hangul_codepoints()
 
+    def is_regenerated(region: str, style: str) -> bool:
+        # --font-template を明示した場合はそのテンプレートが全地域に効く
+        return args.font_template is None and config.is_regenerated(region, style)
+
     for style in styles:
         paths = {r: source_path(r, style) for r in config.regions}
-        missing_files = [str(p) for p in paths.values() if not p.is_file()]
-        if missing_files:
+        missing = {r: p for r, p in paths.items() if not p.is_file()}
+        if missing:
             print(
-                "ERROR: source font(s) not found:\n  " + "\n  ".join(missing_files),
+                "ERROR: source font(s) not found:\n  "
+                + "\n  ".join(str(p) for p in missing.values()),
                 file=sys.stderr,
             )
-            print(
-                "  python3 fetch_sources.py を先に実行してください", file=sys.stderr
-            )
+            if any(is_regenerated(r, style) for r in missing):
+                print(
+                    "  build.ini の REGENERATED_STYLES で母版から作り直す指定に"
+                    "なっているウェイトです。\n"
+                    "  python3 regen_sc_text.py を先に実行してください",
+                    file=sys.stderr,
+                )
+            if any(not is_regenerated(r, style) for r in missing):
+                print(
+                    "  python3 fetch_sources.py を先に実行してください",
+                    file=sys.stderr,
+                )
             return 1
 
         all_codepoints = {r: codepoints_of(p) for r, p in paths.items()}
         target = set().union(*all_codepoints.values()) - config.exclude_codepoints
 
         log(f"=== {style} === target codepoints: {len(target)}")
+        for region in config.regions:
+            if is_regenerated(region, style):
+                log(f"  {region}: regenerated source {paths[region]}")
 
         for region in regions:
             if args.report:

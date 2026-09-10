@@ -92,6 +92,17 @@ def parse_int_list(text: str) -> list[int]:
     return [int(x, 0) for x in parse_list(text)]
 
 
+def parse_pair_set(text: str) -> set[tuple[str, str]]:
+    """"SC:Text, TC:Bold" 形式を {("SC", "Text"), ("TC", "Bold")} にする"""
+    pairs = set()
+    for item in parse_list(text):
+        left, separator, right = item.partition(":")
+        if not separator:
+            raise ValueError(f"expected 'region:style', got {item!r}")
+        pairs.add((left.strip(), right.strip()))
+    return pairs
+
+
 @dataclass
 class Region:
     name: str
@@ -112,6 +123,8 @@ class Config:
     source_dir: Path
     build_dir: Path
     region_source_font: str
+    regenerated_font: str
+    regenerated_styles: set[tuple[str, str]]
     prepared_font: str
     regions: dict[str, Region]
     exclude_codepoints: set[int]
@@ -125,10 +138,27 @@ class Config:
     hdmx_ppem_min: int
     hdmx_ppem_max: int
 
-    def region_source_path(self, region: str, style: str) -> Path:
+    def release_source_path(self, region: str, style: str) -> Path:
+        """IBM 発布件のパス (再生成の対象かどうかに関わらず)"""
         return self.source_dir / self.region_source_font.replace(
             "{region}", region
         ).replace("{style}", style)
+
+    def regenerated_path(self, region: str, style: str) -> Path:
+        """母版から作り直したフォントのパス (regen_sc_text.py の出力)"""
+        return self.source_dir / self.regenerated_font.replace(
+            "{region}", region
+        ).replace("{style}", style)
+
+    def is_regenerated(self, region: str, style: str) -> bool:
+        """REGENERATED_STYLES で発布件を差し替える指定になっているか"""
+        return (region, style) in self.regenerated_styles
+
+    def region_source_path(self, region: str, style: str) -> Path:
+        """CJK 側の入力に使うフォント。再生成の指定があればそちらを返す"""
+        if self.is_regenerated(region, style):
+            return self.regenerated_path(region, style)
+        return self.release_source_path(region, style)
 
     def prepared_path(self, region: str, style: str) -> Path:
         return self.source_dir / self.prepared_font.replace("{region}", region).replace(
@@ -224,6 +254,12 @@ def load(root: Path | None = None) -> Config:
         source_dir=source_dir,
         build_dir=build_dir,
         region_source_font=settings.get("regions", "REGION_SOURCE_FONT"),
+        regenerated_font=settings.get(
+            "regions", "REGENERATED_FONT", fallback="regenerated/{region}-{style}.ttf"
+        ),
+        regenerated_styles=parse_pair_set(
+            settings.get("regions", "REGENERATED_STYLES", fallback="")
+        ),
         prepared_font=settings.get("regions", "PREPARED_FONT"),
         regions=regions,
         exclude_codepoints=set(
