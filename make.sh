@@ -41,11 +41,31 @@ build_font() {
         fontforge_script.py \
         --do-not-delete-build-dir \
         ${DEBUG_OPTS} \
+        ${STYLE_OPTS} \
         ${options}
 
     echo "FontTools: ${variant}"
     python3 fonttools_script.py "${variant}"
 }
+
+ALL_STYLES=(
+    Regular
+    Bold
+    Thin
+    ExtraLight
+    Light
+    Text
+    Medium
+    SemiBold
+    Italic
+    BoldItalic
+    ThinItalic
+    ExtraLightItalic
+    LightItalic
+    TextItalic
+    MediumItalic
+    SemiBoldItalic
+)
 
 # 重い Nerd Fonts を先に回して、4並列の待ち時間を抑える
 # DEBUG=1 のときは通常版のみ（Regular ウェイトのみ生成）
@@ -69,24 +89,31 @@ else
         "--hidden-zenkaku-space --console|ConsoleHS-"
         "--hidden-zenkaku-space --console --35|35ConsoleHS-"
     )
-    styles=(
-        Regular
-        Bold
-        Thin
-        ExtraLight
-        Light
-        Text
-        Medium
-        SemiBold
-        Italic
-        BoldItalic
-        ThinItalic
-        ExtraLightItalic
-        LightItalic
-        TextItalic
-        MediumItalic
-        SemiBoldItalic
-    )
+    styles=("${ALL_STYLES[@]}")
+fi
+
+# STYLES でビルドするスタイル (ウェイト) を絞れるようにする
+# 例: STYLES="Regular Bold" / STYLES="Text TextItalic"
+STYLE_OPTS=""
+if [ -n "${STYLES:-}" ]; then
+    read -r -a wanted_styles <<<"$STYLES"
+    selected_styles=()
+    for item in "${ALL_STYLES[@]}"; do
+        for wanted in "${wanted_styles[@]}"; do
+            if [ "$item" = "$wanted" ]; then
+                selected_styles+=("$item")
+                break
+            fi
+        done
+    done
+    if [ ${#selected_styles[@]} -ne ${#wanted_styles[@]} ]; then
+        echo "ERROR: STYLES に一致しないスタイルがあります: ${STYLES}" >&2
+        echo "  指定できる値: ${ALL_STYLES[*]}" >&2
+        exit 1
+    fi
+    styles=("${selected_styles[@]}")
+    STYLE_OPTS="--styles $(IFS=,; echo "${styles[*]}")"
+    echo "### Selected styles: ${styles[*]} ###"
 fi
 
 # VARIANTS でビルドするバリアントを絞れるようにする

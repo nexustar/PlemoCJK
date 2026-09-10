@@ -57,6 +57,28 @@ options = {}
 nerd_font = None
 
 
+# 生成するスタイルの一覧 (CJK 側のスタイル, 英数字側のスタイル, 出力のスタイル)
+STYLE_TABLE = (
+    ("Regular", "Regular", "Regular"),
+    ("Bold", "Bold", "Bold"),
+    ("Thin", "Thin", "Thin"),
+    ("ExtraLight", "ExtraLight", "ExtraLight"),
+    ("Light", "Light", "Light"),
+    ("Text", "Text", "Text"),
+    ("Medium", "Medium", "Medium"),
+    ("SemiBold", "SemiBold", "SemiBold"),
+    ("Regular", "Italic", "Italic"),
+    ("Bold", "BoldItalic", "BoldItalic"),
+    ("Thin", "ThinItalic", "ThinItalic"),
+    ("ExtraLight", "ExtraLightItalic", "ExtraLightItalic"),
+    ("Light", "LightItalic", "LightItalic"),
+    ("Text", "TextItalic", "TextItalic"),
+    ("Medium", "MediumItalic", "MediumItalic"),
+    ("SemiBold", "SemiBoldItalic", "SemiBoldItalic"),
+)
+ALL_STYLES = tuple(style for _, _, style in STYLE_TABLE)
+
+
 def main():
     # オプション判定
     get_options()
@@ -71,99 +93,26 @@ def main():
     if not os.path.exists(BUILD_FONTS_DIR):
         os.mkdir(BUILD_FONTS_DIR)
 
-    generate_font(
-        jp_style="Regular",
-        eng_style="Regular",
-        merged_style="Regular",
-    )
+    styles = options.get("styles")
+    if styles is None and options.get("debug"):
+        # デバッグモードでは Regular のみ生成する
+        styles = ["Regular"]
 
-    # デバッグモードの場合はここで終了
-    if options.get("debug"):
-        return
-
-    generate_font(
-        jp_style="Bold",
-        eng_style="Bold",
-        merged_style="Bold",
-    )
-
-    generate_font(
-        jp_style="Thin",
-        eng_style="Thin",
-        merged_style="Thin",
-    )
-    generate_font(
-        jp_style="ExtraLight",
-        eng_style="ExtraLight",
-        merged_style="ExtraLight",
-    )
-    generate_font(
-        jp_style="Light",
-        eng_style="Light",
-        merged_style="Light",
-    )
-    generate_font(
-        jp_style="Text",
-        eng_style="Text",
-        merged_style="Text",
-    )
-    generate_font(
-        jp_style="Medium",
-        eng_style="Medium",
-        merged_style="Medium",
-    )
-    generate_font(
-        jp_style="SemiBold",
-        eng_style="SemiBold",
-        merged_style="SemiBold",
-    )
-
-    generate_font(
-        jp_style="Regular",
-        eng_style="Italic",
-        merged_style="Italic",
-    )
-    generate_font(
-        jp_style="Bold",
-        eng_style="BoldItalic",
-        merged_style="BoldItalic",
-    )
-    generate_font(
-        jp_style="Thin",
-        eng_style="ThinItalic",
-        merged_style="ThinItalic",
-    )
-    generate_font(
-        jp_style="ExtraLight",
-        eng_style="ExtraLightItalic",
-        merged_style="ExtraLightItalic",
-    )
-    generate_font(
-        jp_style="Light",
-        eng_style="LightItalic",
-        merged_style="LightItalic",
-    )
-    generate_font(
-        jp_style="Text",
-        eng_style="TextItalic",
-        merged_style="TextItalic",
-    )
-    generate_font(
-        jp_style="Medium",
-        eng_style="MediumItalic",
-        merged_style="MediumItalic",
-    )
-    generate_font(
-        jp_style="SemiBold",
-        eng_style="SemiBoldItalic",
-        merged_style="SemiBoldItalic",
-    )
+    for jp_style, eng_style, merged_style in STYLE_TABLE:
+        if styles is not None and merged_style not in styles:
+            continue
+        generate_font(
+            jp_style=jp_style,
+            eng_style=eng_style,
+            merged_style=merged_style,
+        )
 
 
 def usage():
     print(
         f"Usage: {sys.argv[0]} "
-        "[--hidden-zenkaku-space] [--35] [--console] [--nerd-font]"
+        "[--hidden-zenkaku-space] [--35] [--console] [--nerd-font] "
+        "[--styles Regular,Bold,...]"
     )
 
 
@@ -176,12 +125,30 @@ def get_options():
     if len(sys.argv) == 1:
         return
 
-    for arg in sys.argv[1:]:
+    skip_next = False
+    for index, arg in enumerate(sys.argv[1:], start=1):
+        if skip_next:
+            skip_next = False
+            continue
         # オプション判定
         if arg == "--do-not-delete-build-dir":
             options["do-not-delete-build-dir"] = True
         elif arg == "--debug":
             options["debug"] = True
+        # 生成するスタイルを絞る (カンマ区切り)
+        elif arg == "--styles":
+            if index + 1 >= len(sys.argv):
+                options["unknown-option"] = True
+                return
+            styles = [s.strip() for s in sys.argv[index + 1].split(",") if s.strip()]
+            unknown = [s for s in styles if s not in ALL_STYLES]
+            if not styles or unknown:
+                print(f"ERROR: unknown style(s): {', '.join(unknown)}")
+                print(f"  available: {', '.join(ALL_STYLES)}")
+                options["unknown-option"] = True
+                return
+            options["styles"] = styles
+            skip_next = True
         elif arg == "--hidden-zenkaku-space":
             options["hidden-zenkaku-space"] = True
         elif arg == "--35":
