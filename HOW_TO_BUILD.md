@@ -9,6 +9,7 @@ Docker を使って PlemolJP をビルドする手順です。
 ### 必要なもの
 
 - [Docker](https://docs.docker.com/get-docker/)
+- `zip` / `unzip`（`release.sh` が配布用アーカイブの作成と検査に使います。ビルドイメージには入っていないので、ホスト側に入れてください。Debian/Ubuntu なら `sudo apt-get install -y zip unzip`）
 
 ソースフォント（IBM Plex Mono / Sans JP など）は本プロジェクトの `source/` に含まれている前提です。
 
@@ -46,7 +47,7 @@ Ubuntu 24.04 系では、おおむね次のパッケージが必要です。
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y fontforge python3 python3-fontforge python3-pip ttfautohint
+sudo apt-get install -y fontforge python3 python3-fontforge python3-pip ttfautohint zip unzip
 python3 -m pip install --break-system-packages fonttools ttfautohint-py
 ./make.sh
 ```
@@ -62,3 +63,57 @@ python3 -m pip install --break-system-packages fonttools ttfautohint-py
 ```
 
 こちらは全バリアントを並列ビルドし、`release_files/` 以下に整理して出力します。
+
+---
+
+## PlemoCJK (地域別サブフォント) のビルド
+
+PlemoCJK では SC / TC / JP / KR の 4 地域サブフォントを作ります。
+手順は上流とほぼ同じですが、前段にソースフォントの取得と
+地域別 CJK 側入力フォントの生成が入ります。
+
+```bash
+# 1. ソースフォントを取得する (SC/TC/KR をダウンロード + SHA-256 検証、JP はリポジトリ内)
+python3 fetch_sources.py
+
+# 2. ビルド (make.sh が prepare_cjk.py も呼ぶ)
+docker run --rm -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
+
+# 3. 4 地域を 1 つの TTC にまとめる (ホスト側で node を使う)
+npm install
+node --max-old-space-size=8192 bundle_ttc.mjs
+
+# 4. 検査
+python3 check_fonts.py --variant Console --ttc build/ttc/PlemoCJKConsole-Regular.ttc
+
+# 5. 配布物を作る (ホスト側で zip / unzip を使う)
+./release.sh
+```
+
+デバッグ用に 1 ファイルだけ作る場合:
+
+```bash
+docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
+```
+
+### make.sh の環境変数
+
+| 変数 | 意味 |
+|---|---|
+| `DEBUG=1` | Regular ウェイトのみ。`VARIANTS`/`REGIONS` 未指定なら Console x 先頭地域の 1 ファイル |
+| `REGIONS="SC KR"` | 地域を絞る (既定は build.ini の `[regions] REGIONS`) |
+| `VARIANTS="Console ConsoleNF"` | バリアントを直接指定 |
+| `VARIANT_SET=full` | 35 幅版と HS 版も作る |
+| `SKIP_PREPARE=1` | `source/prepared/` が既にある場合に prepare_cjk.py を飛ばす |
+| `MAX_PARALLEL=4` | 地域 x バリアントの並列数 |
+
+### ビルドの段構成
+
+1. `prepare_cjk.py` が `source/prepared/PlemoCJK-{region}-{style}.ttf` を作る
+   (地域ごとの回退補入 + ハングル)
+2. バリアントごとに英数字側を 1 回だけ作る
+   (`fontforge_script.py --eng-only` → ttfautohint)。4 地域で同じファイルを使い回す
+3. 地域 x バリアントを並列でビルド
+   (`fontforge_script.py --region XX` → `fonttools_script.py <tag> <region>`)
+
+詳細は [docs/PlemoCJK-plan.md](docs/PlemoCJK-plan.md) を参照。
