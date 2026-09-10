@@ -4,3 +4,15 @@ work/
 error.log
 build/
 release_files/
+
+# PlemoCJK: 追加地域のソースフォントは fetch_sources.py で取得する (リポジトリには入れない)
+# JP は上流 PlemolJP がコミット済みなのでそのまま使う
+source/IBM-Plex-Sans-SC/
+source/IBM-Plex-Sans-TC/
+source/IBM-Plex-Sans-KR/
+# prepare_cjk.py が生成する地域別 CJK 側入力フォント
+source/prepared/
+# Node (otb-ttc-bundle)
+node_modules/
+__pycache__/
+*.pyc
