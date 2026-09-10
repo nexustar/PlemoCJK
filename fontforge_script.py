@@ -471,6 +471,50 @@ def collect_unicodes(font):
     return unicodes
 
 
+def clear_glyph_unicode(glyph, unicode_value):
+    """グリフから unicode_value の割り当てだけを外す
+
+    他のコードポイント (altuni) からも参照されているグリフは本体を残す。
+    clear() したときは True を返す。
+    """
+    altuni = glyph.altuni or ()
+    # 異体字セレクタ付きの割り当ては対象外
+    aliases = set()
+    for entry in altuni:
+        if entry[1] == -1:
+            aliases.add(entry[0])
+
+    if glyph.unicode == unicode_value:
+        if not aliases:
+            glyph.clear()
+            return True
+        # 別名の1つを主コードポイントに昇格させる
+        promoted = min(aliases)
+        remaining = tuple(entry for entry in altuni if entry[0] != promoted)
+        glyph.altuni = remaining if remaining else None
+        glyph.unicode = promoted
+        return False
+
+    if unicode_value in aliases:
+        remaining = tuple(entry for entry in altuni if entry[0] != unicode_value)
+        glyph.altuni = remaining if remaining else None
+        return False
+
+    glyph.clear()
+    return True
+
+
+def clear_unicode(font, unicode_value):
+    """unicode_value のグリフを、他のコードポイントを残して削除する"""
+    try:
+        selection = font.selection.select(("unicode", None), unicode_value)
+    except ValueError:
+        # Encoding is out of range
+        return
+    for glyph in selection.byGlyphs:
+        clear_glyph_unicode(glyph, unicode_value)
+
+
 def delete_duplicate_glyphs(jp_font, eng_font):
     """jp_fontとeng_fontのグリフを比較し、重複するグリフを削除する"""
 
@@ -490,12 +534,12 @@ def delete_duplicate_glyphs(jp_font, eng_font):
     for glyph in jp_font.glyphs():
         if glyph.unicode not in eng_unicodes:
             continue
-        if 0x00C0 <= glyph.unicode <= 0x00D6:
-            glyph.clear()
-        elif 0x00D8 <= glyph.unicode <= 0x00F6:
-            glyph.clear()
-        elif 0x00F8 <= glyph.unicode <= 0x0259:
-            glyph.clear()
+        if (
+            0x00C0 <= glyph.unicode <= 0x00D6
+            or 0x00D8 <= glyph.unicode <= 0x00F6
+            or 0x00F8 <= glyph.unicode <= 0x0259
+        ):
+            clear_glyph_unicode(glyph, glyph.unicode)
 
     # 重複グリフを選択する
     for glyph in jp_font.glyphs("encoding"):
@@ -539,10 +583,11 @@ def delete_duplicate_glyphs(jp_font, eng_font):
             continue
 
     # 重複するグリフを削除
-    for glyph in eng_font.selection.byGlyphs:
-        jp_font.selection.select(("more", "unicode"), glyph.unicode)
-    for glyph in jp_font.selection.byGlyphs:
-        glyph.clear()
+    # 同じグリフを共有する他のコードポイントは残す
+    duplicate_unicodes = [glyph.unicode for glyph in eng_font.selection.byGlyphs]
+    for unicode_value in duplicate_unicodes:
+        jp_font.selection.none()
+        clear_unicode(jp_font, unicode_value)
 
     jp_font.selection.none()
     eng_font.selection.none()
@@ -840,35 +885,17 @@ def merge_hack(jp_font, eng_font, style):
     # 既に英語フォント側に存在する場合はhackグリフは削除する
     for glyph in eng_font.glyphs():
         if glyph.unicode != -1:
-            try:
-                for g in hack_font.selection.select(
-                    ("unicode", None), glyph.unicode
-                ).byGlyphs:
-                    g.clear()
-            except Exception:
-                pass
+            clear_unicode(hack_font, glyph.unicode)
     if options.get("console"):
         # Console版では、日本語フォントよりhackフォントのグリフを優先する
         for glyph in hack_font.glyphs():
             if glyph.unicode != -1:
-                try:
-                    for g in jp_font.selection.select(
-                        ("unicode", None), glyph.unicode
-                    ).byGlyphs:
-                        g.clear()
-                except Exception:
-                    pass
+                clear_unicode(jp_font, glyph.unicode)
     else:
         # 既に日本語フォント側に存在する場合はhackグリフは削除する
         for glyph in jp_font.glyphs():
             if glyph.unicode != -1:
-                try:
-                    for g in hack_font.selection.select(
-                        ("unicode", None), glyph.unicode
-                    ).byGlyphs:
-                        g.clear()
-                except Exception:
-                    pass
+                clear_unicode(hack_font, glyph.unicode)
     # EM 1000 にしたときの幅に合わせて調整
     half_width = int(FULL_WIDTH_35 * 3 / 5)
     for glyph in hack_font.glyphs():
@@ -1038,20 +1065,8 @@ def add_nerd_font_glyphs(jp_font, eng_font):
     for nerd_glyph in nerd_font.glyphs():
         if nerd_glyph.unicode != -1:
             # 既に存在する場合は削除する
-            try:
-                for glyph in jp_font.selection.select(
-                    ("unicode", None), nerd_glyph.unicode
-                ).byGlyphs:
-                    glyph.clear()
-            except Exception:
-                pass
-            try:
-                for glyph in eng_font.selection.select(
-                    ("unicode", None), nerd_glyph.unicode
-                ).byGlyphs:
-                    glyph.clear()
-            except Exception:
-                pass
+            clear_unicode(jp_font, nerd_glyph.unicode)
+            clear_unicode(eng_font, nerd_glyph.unicode)
 
     jp_font.mergeFonts(nerd_font)
 
