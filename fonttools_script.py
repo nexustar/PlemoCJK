@@ -10,6 +10,8 @@ from pathlib import Path
 from fontTools import merge, ttLib, ttx
 from ttfautohint import options, ttfautohint
 
+import plemocjk_metadata
+
 # iniファイルを読み込む
 settings = configparser.ConfigParser()
 settings.read("build.ini", encoding="utf-8")
@@ -24,22 +26,55 @@ WIDTH_35_STR = settings.get("DEFAULT", "WIDTH_35_STR")
 CONSOLE_STR = settings.get("DEFAULT", "CONSOLE_STR")
 
 
+def usage():
+    print(
+        f"Usage:\n"
+        f"  {sys.argv[0]} --eng-hint <variant>       # 英数字側に ttfautohint を掛ける\n"
+        f"  {sys.argv[0]} <variant> [<region>]       # 結合してテーブルを整える"
+    )
+
+
 def main():
     # 第一引数を取得
     # 特定のバリエーションのみを処理するための指定
+    if len(sys.argv) > 1 and sys.argv[1] == "--eng-hint":
+        # PlemoCJK: 英数字側は地域に依存しないので、地域ループの前に 1 回だけ実行する
+        hint_eng_fonts(sys.argv[2] if len(sys.argv) > 2 else "")
+        return
+
     specific_variant = sys.argv[1] if len(sys.argv) > 1 else None
+    # PlemoCJK: 第二引数は地域 (SC / TC / JP / KR)
+    region = sys.argv[2] if len(sys.argv) > 2 else None
 
-    edit_fonts(specific_variant)
+    edit_fonts(specific_variant, region)
 
 
-def edit_fonts(specific_variant: str):
+def hint_eng_fonts(eng_variant: str):
+    """英数字側に ttfautohint を掛ける (地域に依存しない)"""
+    file_pattern = f"{FONTFORGE_PREFIX}{FONT_NAME}{eng_variant}*-eng.ttf"
+    filenames = sorted(glob.glob(f"{BUILD_FONTS_DIR}/{file_pattern}"))
+    if len(filenames) == 0:
+        print(f"Error: {file_pattern} not found")
+        raise SystemExit(1)
+    for filename in filenames:
+        path = Path(filename)
+        if path.stem.endswith("-eng-hinted"):
+            continue
+        style = path.stem.split("-")[1]
+        variant = path.stem.split("-")[0].replace(f"{FONTFORGE_PREFIX}{FONT_NAME}", "")
+        print(f"hint {filename}")
+        add_hinting(filename, filename.replace(".ttf", "-hinted.ttf"), variant, style)
+
+
+def edit_fonts(specific_variant: str, region: str = None):
     """フォントを編集する"""
 
     if specific_variant is None:
         specific_variant = ""
 
+    # PlemoCJK: 地域付きの CJK 側ファイルを起点にする。
     # ファイルをパターンで指定
-    file_pattern = f"{FONTFORGE_PREFIX}{FONT_NAME}{specific_variant}*-eng.ttf"
+    file_pattern = f"{FONTFORGE_PREFIX}{FONT_NAME}{specific_variant}*-jp.ttf"
     filenames = glob.glob(f"{BUILD_FONTS_DIR}/{file_pattern}")
     # ファイルが見つからない場合はエラー
     if len(filenames) == 0:
@@ -50,11 +85,19 @@ def edit_fonts(specific_variant: str):
         print(f"edit {str(path)}")
         style = path.stem.split("-")[1]
         variant = path.stem.split("-")[0].replace(f"{FONTFORGE_PREFIX}{FONT_NAME}", "")
-        add_hinting(str(path), str(path).replace(".ttf", "-hinted.ttf"), variant, style)
-        merge_fonts(style, variant)
+        # 英数字側のファイル名には地域が入らないので、修飾子から地域を取り除いて求める
+        eng_variant = variant.replace(region, "", 1) if region else variant
+        merge_fonts(style, variant, eng_variant)
         fix_font_tables(style, variant)
+        if region:
+            plemocjk_metadata.apply(
+                f"{BUILD_FONTS_DIR}/{FONT_NAME.replace(' ', '')}{variant}-{style}.ttf",
+                region=region,
+                variant_tag=variant,
+                style=style,
+            )
 
-    # 一時ファイルを削除
+    # 一時ファイルを削除 (英数字側は他地域が使うので消さない)
     # スタイル部分以降はワイルドカードで指定
     for filename in glob.glob(
         f"{BUILD_FONTS_DIR}/{FONTTOOLS_PREFIX}{FONT_NAME}{specific_variant}*"
@@ -99,9 +142,12 @@ def add_hinting(input_font_path, output_font_path, variant, style):
     ttfautohint(**options_)
 
 
-def merge_fonts(style, variant):
+def merge_fonts(style, variant, eng_variant=None):
     """フォントを結合する"""
-    eng_font_path = f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{FONT_NAME}{variant}-{style}-eng-hinted.ttf"
+    # PlemoCJK: 英数字側は地域に依存しないため、地域修飾子を除いた名前で探す
+    if eng_variant is None:
+        eng_variant = variant
+    eng_font_path = f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{FONT_NAME}{eng_variant}-{style}-eng-hinted.ttf"
     jp_font_path = (
         f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{FONT_NAME}{variant}-{style}-jp.ttf"
     )

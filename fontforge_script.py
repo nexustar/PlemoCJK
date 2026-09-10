@@ -20,6 +20,9 @@ settings.read("build.ini", encoding="utf-8")
 VERSION = settings.get("DEFAULT", "VERSION")
 FONT_NAME = settings.get("DEFAULT", "FONT_NAME")
 JP_FONT = settings.get("DEFAULT", "JP_FONT")
+# PlemoCJK: --region 指定時に使う、prepare_cjk.py が作った地域別 CJK 側入力フォント
+PREPARED_FONT = settings.get("regions", "PREPARED_FONT")
+HALF_WIDTH_HANGUL_RANGES = settings.get("regions", "HALF_WIDTH_HANGUL_RANGES")
 ENG_FONT = settings.get("DEFAULT", "ENG_FONT")
 HACK_FONT = settings.get("DEFAULT", "HACK_FONT")
 SOURCE_FONTS_DIR = settings.get("DEFAULT", "SOURCE_FONTS_DIR")
@@ -51,6 +54,9 @@ Copyright (c) 2014, Ryan L McIntyre https://ryanlmcintyre.com
 
 [PlemolJP]
 Copyright (c) 2021, Yuko Otawara
+
+[PlemoCJK]
+Copyright (c) 2025, PlemoCJK Authors https://github.com/nexustar/PlemoCJK
 """  # noqa: E501
 
 options = {}
@@ -77,6 +83,30 @@ STYLE_TABLE = (
     ("SemiBold", "SemiBoldItalic", "SemiBoldItalic"),
 )
 ALL_STYLES = tuple(style for _, _, style in STYLE_TABLE)
+
+
+def parse_hex_ranges(text):
+    """"FFA1-FFDC, 3000" 形式を [(start, end), ...] にする"""
+    ranges = []
+    for item in text.replace("\n", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "-" in item:
+            start, end = item.split("-", 1)
+            ranges.append((int(start, 16), int(end, 16)))
+        else:
+            value = int(item, 16)
+            ranges.append((value, value))
+    return ranges
+
+
+HALF_WIDTH_HANGUL = parse_hex_ranges(HALF_WIDTH_HANGUL_RANGES)
+
+
+def is_half_width_hangul(unicode_value):
+    """半角ハングル字母 (U+FFA1-FFDC) は全角化の対象から外す"""
+    return any(start <= unicode_value <= end for start, end in HALF_WIDTH_HANGUL)
 
 
 def main():
@@ -112,7 +142,7 @@ def usage():
     print(
         f"Usage: {sys.argv[0]} "
         "[--hidden-zenkaku-space] [--35] [--console] [--nerd-font] "
-        "[--styles Regular,Bold,...]"
+        "[--styles Regular,Bold,...] [--region SC|TC|JP|KR] [--eng-only]"
     )
 
 
@@ -157,6 +187,16 @@ def get_options():
             options["console"] = True
         elif arg == "--nerd-font":
             options["nerd-font"] = True
+        # PlemoCJK: 地域別サブフォントの CJK 側だけを作る
+        elif arg == "--region":
+            if index + 1 >= len(sys.argv):
+                options["unknown-option"] = True
+                return
+            options["region"] = sys.argv[index + 1]
+            skip_next = True
+        # PlemoCJK: 地域に依存しない英数字側だけを作る
+        elif arg == "--eng-only":
+            options["eng-only"] = True
         else:
             options["unknown-option"] = True
             return
@@ -224,6 +264,9 @@ def generate_font(jp_style, eng_style, merged_style):
 
     # オプション毎の修飾子を追加する
     variant = f"{WIDTH_35_STR} " if options.get("35") else ""
+    # PlemoCJK: 地域修飾子は 35 の直後に入れる (例: PlemoCJK35 SC Console NF)
+    if options.get("region"):
+        variant += f"{options['region']} "
     variant += f"{CONSOLE_STR} " if options.get("console") else ""
     variant += (
         INVISIBLE_ZENKAKU_SPACE_STR if options.get("hidden-zenkaku-space") else ""
@@ -255,23 +298,42 @@ def generate_font(jp_style, eng_style, merged_style):
     # ヒンティングはあとで ttfautohint で行う。
     # flags=("no-hints", "omit-instructions") を使うとヒンティングだけでなく GPOS や GSUB も削除されてしまうので使わない
     font_name = f"{FONT_NAME}{variant}".replace(" ", "")
-    eng_font.generate(
-        f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{font_name}-{merged_style}-eng.ttf",
-    )
-    jp_font.generate(
-        f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{font_name}-{merged_style}-jp.ttf",
-    )
+    # PlemoCJK: 英数字側は地域に依存しないので --eng-only のパスで 1 回だけ作り、
+    # 4 地域で同じファイルを使い回す (バイト単位で同一になる)。
+    # --region 指定時は英数字側を書き出さない (CJK 側の変換に必要なのでメモリ上には作る)。
+    if not options.get("region"):
+        eng_font.generate(
+            f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{font_name}-{merged_style}-eng.ttf",
+        )
+    if not options.get("eng-only"):
+        jp_font.generate(
+            f"{BUILD_FONTS_DIR}/{FONTFORGE_PREFIX}{font_name}-{merged_style}-jp.ttf",
+        )
 
     # ttfを閉じる
     jp_font.close()
     eng_font.close()
 
 
+def cjk_font_path(jp_style: str) -> str:
+    """CJK 側の入力フォントのパスを返す。
+
+    PlemoCJK: --region 指定時は prepare_cjk.py が作った地域別フォントを使う。
+    地域指定が無い場合は上流 PlemolJP と同じ IBM Plex Sans JP をそのまま使う。
+    """
+    region = options.get("region")
+    if region:
+        return (
+            SOURCE_FONTS_DIR
+            + "/"
+            + PREPARED_FONT.replace("{region}", region).replace("{style}", jp_style)
+        )
+    return SOURCE_FONTS_DIR + "/" + JP_FONT.replace("{style}", jp_style)
+
+
 def open_fonts(jp_style: str, eng_style: str):
     """フォントを開く"""
-    jp_font = fontforge.open(
-        SOURCE_FONTS_DIR + "/" + JP_FONT.replace("{style}", jp_style)
-    )
+    jp_font = fontforge.open(cjk_font_path(jp_style))
     eng_font = fontforge.open(
         SOURCE_FONTS_DIR + "/" + ENG_FONT.replace("{style}", eng_style)
     )
@@ -426,69 +488,6 @@ def adjust_em(font):
     font.em = EM_ASCENT + EM_DESCENT
 
 
-def collect_unicodes(font):
-    """フォントが実際に持っているコードポイントの集合を返す
-
-    altuni (1つのグリフに複数のコードポイントが割り当てられている状態) も含める。
-    """
-    unicodes = set()
-    for glyph in font.glyphs():
-        if glyph.unicode > 0 and glyph.isWorthOutputting():
-            unicodes.add(glyph.unicode)
-        if glyph.altuni:
-            for altuni in glyph.altuni:
-                unicodes.add(altuni[0])
-    return unicodes
-
-
-def clear_glyph_unicode(glyph, unicode_value):
-    """グリフから unicode_value の割り当てだけを外す
-
-    1つのグリフに複数のコードポイントが割り当てられている (altuni) 場合、
-    glyph.clear() すると巻き添えで他のコードポイントまで失われてしまう。
-    そのため、他のコードポイントからも参照されているグリフは本体を残し、
-    当該コードポイントの割り当てだけを解除する。
-
-    実際に clear() したときは True を返す。
-    """
-    altuni = glyph.altuni or ()
-    # 異体字セレクタ付きの割り当ては通常のコードポイントとは別物なので触らない
-    aliases = set()
-    for entry in altuni:
-        if entry[1] == -1:
-            aliases.add(entry[0])
-
-    if glyph.unicode == unicode_value:
-        if not aliases:
-            glyph.clear()
-            return True
-        # 別名の1つを主コードポイントへ昇格させ、グリフ本体は残す
-        promoted = min(aliases)
-        remaining = tuple(entry for entry in altuni if entry[0] != promoted)
-        glyph.altuni = remaining if remaining else None
-        glyph.unicode = promoted
-        return False
-
-    if unicode_value in aliases:
-        remaining = tuple(entry for entry in altuni if entry[0] != unicode_value)
-        glyph.altuni = remaining if remaining else None
-        return False
-
-    glyph.clear()
-    return True
-
-
-def clear_unicode(font, unicode_value):
-    """font 内の unicode_value に割り当てられたグリフを別名に配慮して削除する"""
-    try:
-        selection = font.selection.select(("unicode", None), unicode_value)
-    except ValueError:
-        # Encoding is out of range
-        return
-    for glyph in selection.byGlyphs:
-        clear_glyph_unicode(glyph, unicode_value)
-
-
 def delete_duplicate_glyphs(jp_font, eng_font):
     """jp_fontとeng_fontのグリフを比較し、重複するグリフを削除する"""
 
@@ -503,19 +502,25 @@ def delete_duplicate_glyphs(jp_font, eng_font):
     # U+274C (CROSS MARK) を削除 (OSに含まれる絵文字フォントにフォールバックさせるため)
     eng_font[0x274C].clear()
     # LATIN 系グリフには IBM Plex Mono を使用
-    # ただし、英語フォント側が持っていないコードポイントまで削除してしまうと
-    # どちらのフォントにも無くなり、合成結果から欠落する。
-    # 英語フォント側にあるコードポイントだけを削除する。
-    eng_unicodes = collect_unicodes(eng_font)
+    # PlemoCJK: 英数字側に無いコードポイントまで消すと、どちらにも無くなって
+    # 穴が開く (U+0250-0258 の IPA 等。JIS X 0213 と GBK に影響する)。
+    # 英数字側が持っているコードポイントだけ消す。
+    eng_unicodes = set()
+    for glyph in eng_font.glyphs():
+        if glyph.unicode > 0 and glyph.isWorthOutputting():
+            eng_unicodes.add(glyph.unicode)
+        if glyph.altuni:
+            for u in glyph.altuni:
+                eng_unicodes.add(u[0])
     for glyph in jp_font.glyphs():
         if glyph.unicode not in eng_unicodes:
             continue
-        if (
-            0x00C0 <= glyph.unicode <= 0x00D6
-            or 0x00D8 <= glyph.unicode <= 0x00F6
-            or 0x00F8 <= glyph.unicode <= 0x0259
-        ):
-            clear_glyph_unicode(glyph, glyph.unicode)
+        if 0x00C0 <= glyph.unicode <= 0x00D6:
+            glyph.clear()
+        elif 0x00D8 <= glyph.unicode <= 0x00F6:
+            glyph.clear()
+        elif 0x00F8 <= glyph.unicode <= 0x0259:
+            glyph.clear()
 
     # 重複グリフを選択する
     for glyph in jp_font.glyphs("encoding"):
@@ -559,14 +564,10 @@ def delete_duplicate_glyphs(jp_font, eng_font):
             continue
 
     # 重複するグリフを削除
-    # どのコードポイントが重複していたのかを保ったまま削除する。
-    # 1つの日本語グリフが複数のコードポイントに割り当てられていて、
-    # そのうち一部だけが英語フォント側と重複している場合、
-    # グリフごと消してしまうと重複していないコードポイントまで失われるため。
-    duplicate_unicodes = [glyph.unicode for glyph in eng_font.selection.byGlyphs]
-    for unicode_value in duplicate_unicodes:
-        jp_font.selection.none()
-        clear_unicode(jp_font, unicode_value)
+    for glyph in eng_font.selection.byGlyphs:
+        jp_font.selection.select(("more", "unicode"), glyph.unicode)
+    for glyph in jp_font.selection.byGlyphs:
+        glyph.clear()
 
     jp_font.selection.none()
     eng_font.selection.none()
@@ -714,8 +715,24 @@ def transform_italic_glyphs(font):
 
 
 def set_width_600_or_1000(jp_font):
-    """半角幅か全角幅になるように変換する"""
+    """半角幅か全角幅になるように変換する
+
+    PlemoCJK: IBM Plex Sans KR のハングル音節は幅 892 なので、
+    「500 < 幅 < 1000 なら 1000 幅に中央寄せ」の分岐でそのまま全角化される。
+    4 地域すべてがこの同じ処理を通るため、出力されるハングルのグリフは
+    バイト単位で一致し、TTC の glyf 共有が効く。
+    半角ハングル字母 (U+FFA1-FFDC) は半角のままにする。
+    """
     for glyph in jp_font.glyphs():
+        if is_half_width_hangul(glyph.unicode):
+            # 半角のまま (後続の 500 -> 600 の正規化だけは通す)
+            if 0 < glyph.width < 500:
+                glyph.transform(psMat.translate((500 - glyph.width) / 2, 0))
+                glyph.width = 500
+            if glyph.width == 500:
+                glyph.transform(psMat.translate((600 - glyph.width) / 2, 0))
+                glyph.width = 600
+            continue
         if 0 < glyph.width < 500:
             # グリフ位置を調整してから幅を設定
             glyph.transform(psMat.translate((500 - glyph.width) / 2, 0))
@@ -864,17 +881,35 @@ def merge_hack(jp_font, eng_font, style):
     # 既に英語フォント側に存在する場合はhackグリフは削除する
     for glyph in eng_font.glyphs():
         if glyph.unicode != -1:
-            clear_unicode(hack_font, glyph.unicode)
+            try:
+                for g in hack_font.selection.select(
+                    ("unicode", None), glyph.unicode
+                ).byGlyphs:
+                    g.clear()
+            except Exception:
+                pass
     if options.get("console"):
         # Console版では、日本語フォントよりhackフォントのグリフを優先する
         for glyph in hack_font.glyphs():
             if glyph.unicode != -1:
-                clear_unicode(jp_font, glyph.unicode)
+                try:
+                    for g in jp_font.selection.select(
+                        ("unicode", None), glyph.unicode
+                    ).byGlyphs:
+                        g.clear()
+                except Exception:
+                    pass
     else:
         # 既に日本語フォント側に存在する場合はhackグリフは削除する
         for glyph in jp_font.glyphs():
             if glyph.unicode != -1:
-                clear_unicode(hack_font, glyph.unicode)
+                try:
+                    for g in hack_font.selection.select(
+                        ("unicode", None), glyph.unicode
+                    ).byGlyphs:
+                        g.clear()
+                except Exception:
+                    pass
     # EM 1000 にしたときの幅に合わせて調整
     half_width = int(FULL_WIDTH_35 * 3 / 5)
     for glyph in hack_font.glyphs():
@@ -1044,8 +1079,20 @@ def add_nerd_font_glyphs(jp_font, eng_font):
     for nerd_glyph in nerd_font.glyphs():
         if nerd_glyph.unicode != -1:
             # 既に存在する場合は削除する
-            clear_unicode(jp_font, nerd_glyph.unicode)
-            clear_unicode(eng_font, nerd_glyph.unicode)
+            try:
+                for glyph in jp_font.selection.select(
+                    ("unicode", None), nerd_glyph.unicode
+                ).byGlyphs:
+                    glyph.clear()
+            except Exception:
+                pass
+            try:
+                for glyph in eng_font.selection.select(
+                    ("unicode", None), nerd_glyph.unicode
+                ).byGlyphs:
+                    glyph.clear()
+            except Exception:
+                pass
 
     jp_font.mergeFonts(nerd_font)
 
