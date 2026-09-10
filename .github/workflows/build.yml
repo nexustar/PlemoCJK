@@ -24,10 +24,68 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # IBM 発布の Plex Sans SC の Text は補間位置が 425 で JP / TC (450) より
+  # 約 5% 細いので、IBM の Glyphs 母版から 450 で作り直す。
+  # 母版の zip が 186MB、fontmake に数分と 3GB 程度のメモリが必要なので
+  # 独立したジョブにしてキャッシュする (prepare が成果物を使う)。
+  # ---------------------------------------------------------------------------
+  regen-sc-text:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 母版の zip と再生成したフォントをまとめてキャッシュする。
+      # sources.lock に zip の URL と SHA-256 が入っているので、
+      # lock かスクリプトが変わったときだけ作り直す。
+      - name: Cache regenerated SC Text
+        id: regen-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            source/ibm-plex-sans-sc-sources.zip
+            source/regenerated
+          key: >-
+            sc-text-450-${{ hashFiles('sources.lock') }}-${{
+            hashFiles('regen_sc_text.py') }}
+
+      # 発布件の SC は cmap / name を揃える参照と --check に必要なので
+      # キャッシュが当たっても取得する (prepare のキャッシュとは別キーにする)
+      - name: Cache IBM Plex Sans SC release
+        uses: actions/cache@v4
+        with:
+          path: source/IBM-Plex-Sans-SC
+          key: plex-sources-sc-${{ hashFiles('sources.lock') }}
+
+      - name: Install fontmake
+        run: pip install "fontmake[pathops]"
+
+      - name: Fetch IBM Plex Sans SC release
+        run: python3 fetch_sources.py --regions SC
+
+      - name: Regenerate SC Text at interpolation weight 450
+        if: steps.regen-cache.outputs.cache-hit != 'true'
+        run: python3 regen_sc_text.py
+
+      - name: Verify regenerated SC Text
+        run: python3 regen_sc_text.py --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-sc-text
+          path: source/regenerated/*.ttf
+          retention-days: 1
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
   # 地域別の CJK 側入力フォントを 1 回だけ作って共有する。
   # 4 地域 x 3 バリアント = 12 ジョブが同じものを作り直すのは無駄なため。
   # ---------------------------------------------------------------------------
   prepare:
+    needs: regen-sc-text
     runs-on: ubuntu-latest
     outputs:
       variants: ${{ steps.matrix.outputs.variants }}
@@ -73,6 +131,13 @@ jobs:
 
       - name: Fetch and verify IBM Plex sources
         run: python3 fetch_sources.py
+
+      # build.ini の REGENERATED_STYLES が指す SC Text (450) を受け取る。
+      # prepare_cjk.py はこれが無いとエラーで止まる
+      - uses: actions/download-artifact@v4
+        with:
+          name: regenerated-sc-text
+          path: source/regenerated
 
       - name: Prepare per-region CJK fonts
         env:

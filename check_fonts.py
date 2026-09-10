@@ -7,8 +7,7 @@
 2. 4 地域のコードポイント集合が一致しているか
 3. JIS X 0208 / JIS X 0213 / GB 2312 / GBK / Big5 / KS X 1001 のカバレッジ
    (各文字集合は Python 内蔵コーデックから生成する)
-4. 「一」「丨」の線幅が 8 ウェイト x 4 地域で揃っているか
-   (IBM リリースの SC Text は他地域より 5% 細いので例外扱い)
+4. 「一」「丨」の線幅が 8 ウェイト x 4 地域で揃っているか (例外なし)
 5. TTC の中で glyf が 1 本に共有されているか
 6. 中日韓のテスト文に .notdef が出ないか
 7. メタデータ (meta / OS/2 コードページ / fsSelection / hdmx / name)
@@ -46,9 +45,11 @@ TEST_SENTENCES = {
 
 # 線幅を測る字。一 は横画 (高さで測る)、丨 は縦画 (幅で測る)
 STROKE_GLYPHS = {0x4E00: "height", 0x4E28: "width"}
-STROKE_TOLERANCE = 0.08  # 8% まで許容
-# IBM リリース時点の既知の差異: SC の Text は補間位置が 425 (他は 450) で 5% 細い
-STROKE_EXCEPTIONS = {("SC", "Text"), ("SC", "TextItalic")}
+# 8 ウェイト x 4 地域の実測で最大のばらつきは 3.0%
+# (ExtraLight の 丨 が 32 対 33 で 1 ユニットずれるだけ) なので 5% を上限にする。
+# IBM 発布の SC Text は補間位置が 425 で 5.6% 細かったが、
+# regen_sc_text.py が母版から 450 で作り直すので例外扱いは要らなくなった。
+STROKE_TOLERANCE = 0.05
 
 
 def log(*args) -> None:
@@ -216,7 +217,12 @@ def glyph_bounds(font: TTFont, codepoint: int):
 def check_stroke_weights(
     font_paths: dict[tuple[str, str], Path], config: plemocjk_config.Config
 ) -> list[str]:
-    """「一」「丨」の線幅が地域間で揃っているか"""
+    """「一」「丨」の線幅が 8 ウェイトとも 4 地域で揃っているか。
+
+    例外は設けない。IBM 発布の SC Text だけが補間位置 425 で他地域 (450) より
+    5.6% 細いので、regen_sc_text.py が母版から 450 で作り直したものを使う
+    (build.ini の REGENERATED_STYLES)。
+    """
     errors = []
     log("--- stroke weight consistency (U+4E00 / U+4E28) ---")
     styles = sorted({style for _, style in font_paths})
@@ -244,23 +250,6 @@ def check_stroke_weights(
             detail = "  ".join(f"{r}={v:.0f}" for r, v in measures.items())
             if spread <= STROKE_TOLERANCE:
                 log(f"  U+{codepoint:04X} {style}: {detail} (spread {spread:.1%})")
-                continue
-            # 許容を超えた場合、既知の例外 (SC Text) を除いて比べ直す
-            filtered = {
-                region: value
-                for region, value in measures.items()
-                if (region, style) not in STROKE_EXCEPTIONS
-            }
-            values = list(filtered.values()) or values
-            lowest, highest = min(values), max(values)
-            spread2 = (highest - lowest) / highest if highest else 0.0
-            excluded = sorted(set(measures) - set(filtered))
-            if spread2 <= STROKE_TOLERANCE:
-                log(
-                    f"  U+{codepoint:04X} {style}: {detail} "
-                    f"(spread {spread:.1%}, {spread2:.1%} excluding "
-                    f"known exception {excluded}) OK"
-                )
                 continue
             log(f"  U+{codepoint:04X} {style}: {detail} (spread {spread:.1%}) FAIL")
             errors.append(
