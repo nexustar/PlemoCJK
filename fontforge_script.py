@@ -459,6 +459,18 @@ def adjust_em(font):
     font.em = EM_ASCENT + EM_DESCENT
 
 
+def collect_unicodes(font):
+    """フォントが持つコードポイント (altuni を含む) の集合を返す"""
+    unicodes = set()
+    for glyph in font.glyphs():
+        if glyph.unicode > 0 and glyph.isWorthOutputting():
+            unicodes.add(glyph.unicode)
+        if glyph.altuni:
+            for altuni in glyph.altuni:
+                unicodes.add(altuni[0])
+    return unicodes
+
+
 def delete_duplicate_glyphs(jp_font, eng_font):
     """jp_fontとeng_fontのグリフを比較し、重複するグリフを削除する"""
 
@@ -473,7 +485,11 @@ def delete_duplicate_glyphs(jp_font, eng_font):
     # U+274C (CROSS MARK) を削除 (OSに含まれる絵文字フォントにフォールバックさせるため)
     eng_font[0x274C].clear()
     # LATIN 系グリフには IBM Plex Mono を使用
+    # 英語フォント側にあるコードポイントだけを削除する
+    eng_unicodes = collect_unicodes(eng_font)
     for glyph in jp_font.glyphs():
+        if glyph.unicode not in eng_unicodes:
+            continue
         if 0x00C0 <= glyph.unicode <= 0x00D6:
             glyph.clear()
         elif 0x00D8 <= glyph.unicode <= 0x00F6:
