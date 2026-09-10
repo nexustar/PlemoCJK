@@ -271,7 +271,7 @@ def fix_name_table(xml: ET):
     # タグ形式: <namerecord nameID="0" platformID="1" platEncID="0" langID="0x0" unicode="True">COPYLIGHT</namerecord>
     parent = xml.find("name")
     for element in parent.findall("namerecord[@nameID='0']"):
-        if "PlemolJP" not in element.text:
+        if FONT_NAME not in element.text:
             parent.remove(element)
 
 
