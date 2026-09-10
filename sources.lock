@@ -34,5 +34,14 @@
     "source/IBM-Plex-Sans-TC/unhinted/IBMPlexSansTC-SemiBold.ttf": "6f0b3cd3e45710fcd43f229cb5a3180637ce524a3f294766e46122fdc6dba729",
     "source/IBM-Plex-Sans-TC/unhinted/IBMPlexSansTC-Text.ttf": "a0dee1bb30d1609031cab10fda737ac8629e8ac19d4f5b40869ffbd61899c32d",
     "source/IBM-Plex-Sans-TC/unhinted/IBMPlexSansTC-Thin.ttf": "926c53b660543b40a51653522b6b10fbcf07497d610760ec3da8bb10fdcbc72c"
+  },
+  "sc_master_source": {
+    "tag": "@ibm/plex-sans-sc@1.1.0",
+    "asset": "sources.zip",
+    "url": "https://github.com/IBM/plex/releases/download/%40ibm/plex-sans-sc%401.1.0/sources.zip",
+    "size": "186169692",
+    "sha256": "136363a1fa695df192fe05a6b6527ae61dbae8ccc311920e5fe96cb4f73a0ea7",
+    "path": "source/ibm-plex-sans-sc-sources.zip",
+    "master": "sources/masters/IBM Plex Sans SC.glyphs"
   }
 }

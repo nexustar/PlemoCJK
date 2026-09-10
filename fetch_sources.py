@@ -122,6 +122,9 @@ def write_lock(entries: dict[str, dict[str, str]]) -> None:
         "plex_commit": PLEX_COMMIT,
         "files": dict(sorted(entries.items())),
     }
+    # regen_sc_text.py が書く sc_master_source など、他のスクリプトの記録は残す
+    for key, value in load_lock().items():
+        payload.setdefault(key, value)
     LOCK_PATH.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )

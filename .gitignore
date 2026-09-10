@@ -12,6 +12,10 @@ source/IBM-Plex-Sans-TC/
 source/IBM-Plex-Sans-KR/
 # prepare_cjk.py が生成する地域別 CJK 側入力フォント
 source/prepared/
+# regen_sc_text.py が取得する IBM の Glyphs 母版 (sources.zip) と
+# そこから作り直したフォント
+source/ibm-plex-sans-sc-sources.zip
+source/regenerated/
 # Node (otb-ttc-bundle)
 node_modules/
 __pycache__/
