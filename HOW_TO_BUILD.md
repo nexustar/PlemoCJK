@@ -76,6 +76,12 @@ PlemoCJK では SC / TC / JP / KR の 4 地域サブフォントを作ります�
 # 1. ソースフォントを取得する (SC/TC/KR をダウンロード + SHA-256 検証、JP はリポジトリ内)
 python3 fetch_sources.py
 
+# 1b. SC の Text だけ IBM の Glyphs 母版から補間位置 450 で作り直す
+#     (IBM 発布件は 425 で JP/TC より約 5% 細い。詳細は docs/PlemoCJK-plan.md §6.1)
+#     母版の zip が 186MB、fontmake に数分と 3GB 程度のメモリが必要
+pip install "fontmake[pathops]"
+python3 regen_sc_text.py
+
 # 2. ビルド (make.sh が prepare_cjk.py も呼ぶ)
 docker run --rm -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
 
@@ -103,12 +109,16 @@ docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builde
 | `DEBUG=1` | Regular ウェイトのみ。`VARIANTS`/`REGIONS` 未指定なら Console x 先頭地域の 1 ファイル |
 | `REGIONS="SC KR"` | 地域を絞る (既定は build.ini の `[regions] REGIONS`) |
 | `VARIANTS="Console ConsoleNF"` | バリアントを直接指定 |
+| `STYLES="Text TextItalic"` | スタイル (ウェイト) を直接指定。`DEBUG` より優先し、`prepare_cjk.py` に渡すウェイトもこれに揃う |
 | `VARIANT_SET=full` | 35 幅版と HS 版も作る |
 | `SKIP_PREPARE=1` | `source/prepared/` が既にある場合に prepare_cjk.py を飛ばす |
 | `MAX_PARALLEL=4` | 地域 x バリアントの並列数 |
 
 ### ビルドの段構成
 
+0. `regen_sc_text.py` が `source/regenerated/IBMPlexSansSC-Text.ttf` を作る
+   (IBM の母版から補間位置 450 で SC の Text だけ作り直す。`build.ini` の
+   `REGENERATED_STYLES` がこの 1 ウェイトを発布件の代わりに使うよう指示している)
 1. `prepare_cjk.py` が `source/prepared/PlemoCJK-{region}-{style}.ttf` を作る
    (地域ごとの回退補入 + ハングル)
 2. バリアントごとに英数字側を 1 回だけ作る

@@ -253,6 +253,66 @@ SC / TC / KR 放在 `source/IBM-Plex-Sans-{SC,TC,KR}/unhinted/`，已加入
 `.gitignore`（不入库）。JP 沿用上游已经提交进仓库的那份——实测它与固定
 commit 的 unhinted JP **哈希完全一致**，所以 `sources.lock` 是自洽的。
 
+### 6.1 SC 的 Text 从母版重新生成
+
+IBM 发布的 Plex Sans SC，Text 实例的插值位置是 **425**，而 JP / TC 是 **450**，
+于是四个地区并排时只有 SC 的 Text 偏细约 5%（实测表见 §9）。
+`regen_sc_text.py` 只重做这一个字重，其余七个字重仍用发布件。
+
+1. 从 GitHub API `repos/IBM/plex/releases?per_page=100` 找出 tag 形如
+   `@ibm/plex-sans-sc@X.Y.Z` 的最新 release，取附件 `sources.zip`
+   （当前是 `@ibm/plex-sans-sc@1.1.0`，186,169,692 字节）。URL 与 SHA-256 记在
+   `sources.lock` 的 `sc_master_source` 键下，以后每次运行都校验；zip 缓存在
+   `source/ibm-plex-sans-sc-sources.zip`（已 `.gitignore`）。
+   zip 里也有 `instances/{postscript,truetype}/` 下的预插值实例，
+   但那些仍然是 425，不能用。
+2. 只解出 `sources/masters/IBM Plex Sans SC.glyphs`（210 MB，Glyphs 2 格式）。
+3. 按括号配对扫描 `instances` 数组，定位 `name = Text` 的那一块，把它的
+   `interpolationWeight = 425;` 改成 `450`。**不做全局替换**：母版里 Medium 写着
+   505、SemiBold 写着 602，都是与发布件不符的过期值，既不能动也不能参照。
+   实测补丁只改 2 个字节，文件长度不变。（`instanceInterpolations` 是 Glyphs
+   自己缓存的权重系数，glyphsLib 只把它当 lib 键搬运、不参与插值，所以不用改。）
+4. `fontmake -g <file> -i "IBM Plex Sans SC Text" -o ttf
+   --overlaps-backend pathops --no-production-names`。约 5 分钟、峰值 3 GB 内存
+   （解析 210 MB 的母版本身约 2.5 分钟）；glyphsLib 会警告 kern class 缺失，无害。
+   master / instance UFO 等中间产物放在 `TMPDIR` 下，跑完即删。
+5. 与 IBM 发布件的 SC Text 对齐：
+   - **cmap**：fontmake 会多出 `U+0302` / `U+0303` / `U+24C7`（IBM 没有映射），
+     删掉；IBM 把 `U+22EF` 也指向 `U+2026` 的字形而 fontmake 没做，补上。
+     补的时候不靠字形名（发布件用 production names，这里用
+     `--no-production-names`，有一部分名字不同），而是用「发布件里指向同一字形的
+     另一个码位」在再生成字体里对应的字形。结果 SC 八个字重 cmap 完全一致。
+   - **name**：nameID < 256 全部取发布件的（家族名 / 样式名 / 版本 / 唯一 ID /
+     本地化名）。≥ 256 保留再生成字体自己的，因为 GSUB 的 FeatureParams
+     （stylistic set 的显示名）会引用它们。
+   - **OS/2 / hhea / post / head**：`usWeightClass = 450`，并把 panose、
+     `sTypo*` / `usWin*` / `sxHeight` / `sCapHeight`、hhea 的升降部、
+     下划线位置、`fontRevision` 等对齐到发布件，让输出可以直接当发布件的
+     替换件用。其余表交给后段流程（上游 `fontforge_script.py` /
+     `fonttools_script.py` 本来就会重写）。
+6. 输出 `source/regenerated/IBMPlexSansSC-Text.ttf`（已 `.gitignore`）。
+
+`build.ini` 用两个显式开关接上：
+
+```ini
+REGENERATED_FONT = regenerated/IBMPlexSans{region}-{style}.ttf
+REGENERATED_STYLES = SC:Text
+```
+
+`plemocjk_config.Config.region_source_path()` 据此在发布件和再生成件之间选，
+`prepare_cjk.py` 找不到再生成件时报错并提示先跑 `regen_sc_text.py`。
+把 `REGENERATED_STYLES` 清空就回到「全部用发布件」。
+
+**流程忠实性**：同一套步骤不改 `interpolationWeight`（Regular 的 360）生成
+Regular，得到的「一」68 /「丨」70 与 IBM 发布件逐值一致，说明 425 → 450 是
+唯一的变量。
+
+CI 里这一步是独立的 `regen-sc-text` job：`pip install fontmake[pathops]` →
+`fetch_sources.py --regions SC` → `regen_sc_text.py` → `regen_sc_text.py --check`，
+用 `actions/cache` 缓存 `source/ibm-plex-sans-sc-sources.zip` 与
+`source/regenerated/`（key 含 `sources.lock` 与 `regen_sc_text.py` 的哈希），
+结果作为 `regenerated-sc-text` 产物交给 `prepare`。
+
 ### 关于「unhinted」
 
 IBM 的 unhinted 包并不是完全没有指令：JP 有 456 个字形带共 23 KB 指令，
@@ -309,19 +369,31 @@ TTC 表副本数（4 个子字体）：`glyf` 1 份，`fpgm`/`cvt`/`prep`/`gasp`
 4. 谚文码位数、音节数、宽度
 5. 中 / 日 / 韩 / 混排测试句无 `.notdef`
 6. 元数据（meta、代码页、`USE_TYPO_METRICS`、hdmx 的 1:2 比例、本地化名）
-7. 「一」「丨」笔画粗细在四个地区间一致（容差 8%，SC Text 为已知例外）
+7. 「一」「丨」笔画粗细在八个字重上四个地区一致，**没有例外**。
+   实测最大偏差 3.0%（ExtraLight 的「丨」32 对 33，差 1 个单位），
+   所以容差从 8% 收紧到 5%。原来唯一的例外（SC Text）已由 §6.1 解决。
 8. TTC 里 `glyf` 只有一份、子字体数与顺序、各子字体 cmap 一致
 
-`.github/workflows/build.yml` 三段：
+`regen_sc_text.py --check` 另外单独验证再生成的 SC Text：
+「一」「丨」与 JP / TC 的 Text 逐值相同，且 cmap 与 SC Regular 完全一致。
+
+`.github/workflows/build.yml` 四段：
 
 ```
-prepare  下载+校验源字体 -> prepare_cjk.py -> 上传 prepared 产物
-build    矩阵 (4 地区 x N 变体)，在 ghcr.io/yuru7/composite-font-builder 容器里跑 make.sh
-bundle   汇总全部 TTF -> bundle_ttc.mjs -> check_fonts.py -> release.sh -> 上传 zip
+regen-sc-text  IBM 母版 -> interpolationWeight 450 -> fontmake -> 上传 SC Text (带缓存)
+prepare        下载+校验源字体 -> prepare_cjk.py -> 上传 prepared 产物
+build          矩阵 (4 地区 x N 变体)，在 ghcr.io/yuru7/composite-font-builder 容器里跑 make.sh
+bundle         汇总全部 TTF -> bundle_ttc.mjs -> check_fonts.py -> release.sh -> 上传 zip
 ```
 
-`prepare` 单独一段是因为 12 个构建 job 没必要各自重做同样的地区合成；
+`regen-sc-text` 单独一段是因为它要装 fontmake、下 186 MB 的母版 zip、
+跑 5 分钟 3 GB 内存的插值，而结果只有 9 MB 且只依赖 `sources.lock`，
+适合缓存。`prepare` 单独一段是因为 12 个构建 job 没必要各自重做同样的地区合成；
 `bundle` 单独一段是因为 TTC 打包内存需求高，且必须等四个地区都齐。
+
+`bundle` 里的 `release.sh` 跑在 runner 宿主机上而不是容器里，因为它需要
+`zip` / `unzip`，而 `composite-font-builder` 镜像没有这两个命令
+（`ubuntu-latest` 有；workflow 里仍然先确认一次，必要时 `apt-get install`）。
 
 构建 job 不用 `container:` 而是在 `ubuntu-latest` 上 `docker run`，因为
 `ghcr.io/yuru7/composite-font-builder` 镜像里没有 `git` 也没有 `node`，
@@ -333,28 +405,33 @@ bundle   汇总全部 TTF -> bundle_ttc.mjs -> check_fonts.py -> release.sh -> �
 
 ---
 
-## 9. 已知差异与未做的事
+## 9. 已解决：SC Text 字重偏细
 
-- **SC Text 字重偏细**：IBM 发布的 Plex Sans SC 的 Text 插值位置是 425，
-  JP / TC 是 450，结果 SC Text 比其他地区细约 5%。本里程碑不处理，
-  `check_fonts.py` 把它列为已知例外。
+IBM 发布的 Plex Sans SC 的 Text 插值位置是 425，JP / TC 是 450，结果 SC Text
+比其他地区细约 5%。**已通过从母版按 450 重新生成解决**（方法见 §6.1）。
 
-  实测「一」的横画高度与「丨」的竖画宽度（IBM Plex Sans unhinted，
-  KR 无汉字故不参与）：
+实测「一」的横画高度与「丨」的竖画宽度（IBM Plex Sans unhinted，
+KR 无汉字故不参与）：
 
-  | 字重 | 一 SC/TC/JP | 丨 SC/TC/JP | 偏差 |
-  |---|---|---|---|
-  | Thin | 20 / 20 / 20 | 20 / 20 / 20 | 0% |
-  | ExtraLight | 32 / 32 / 32 | 33 / 33 / 32 | 3.0% |
-  | Light | 52 / 52 / 52 | 54 / 54 / 54 | 0% |
-  | Regular | 68 / 68 / 68 | 70 / 70 / 70 | 0% |
-  | **Text** | **80** / 84 / 84 | **84** / 89 / 89 | **4.8% / 5.6%** |
-  | Medium | 100 / 100 / 100 | 105 / 105 / 105 | 0% |
-  | SemiBold | 116 / 116 / 116 | 125 / 125 / 125 | 0% |
-  | Bold | 132 / 132 / 132 | 142 / 142 / 142 | 0% |
+| 字重 | 一 SC/TC/JP | 丨 SC/TC/JP | 偏差 |
+|---|---|---|---|
+| Thin | 20 / 20 / 20 | 20 / 20 / 20 | 0% |
+| ExtraLight | 32 / 32 / 32 | 33 / 33 / 32 | 3.0% |
+| Light | 52 / 52 / 52 | 54 / 54 / 54 | 0% |
+| Regular | 68 / 68 / 68 | 70 / 70 / 70 | 0% |
+| Text（IBM 发布件，425） | **80** / 84 / 84 | **84** / 89 / 89 | **4.8% / 5.6%** |
+| **Text（本项目再生成，450）** | **84** / 84 / 84 | **89** / 89 / 89 | **0%** |
+| Medium | 100 / 100 / 100 | 105 / 105 / 105 | 0% |
+| SemiBold | 116 / 116 / 116 | 125 / 125 / 125 | 0% |
+| Bold | 132 / 132 / 132 | 142 / 142 / 142 | 0% |
 
-  `check_fonts.py` 的容差设为 8%，所以 Text 的 5.6% 不会报错；
-  `STROKE_EXCEPTIONS` 里的 `(SC, Text)` 是防止将来偏差扩大时误报的兜底。
+剩下的最大偏差是 ExtraLight 的「丨」（32 对 33，3.0%，1 个单位的取整差），
+所以 `check_fonts.py` 的容差可以从 8% 收紧到 5%，并且不再需要任何例外。
+
+---
+
+## 10. 已知差异与未做的事
+
 - **JIS X 0213 缺 2 字**：`U+2985` / `U+2986`（白括号）在四个 Plex Sans 里
   都没有，需要自己画。这是四个标准里唯一剩下的缺口。
 - **GSUB 异体字被裁掉**：见 §2.5，相对上游 PlemolJP 是行为改变。

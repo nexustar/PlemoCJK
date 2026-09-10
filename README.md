@@ -152,10 +152,26 @@ build/ttc/PlemoCJKConsole-Regular.ttc   # 里面有 SC / TC / JP / KR 四个子�
 对应地区的 OS/2 代码页位、以及 zh_CN / zh_TW / ja / ko 的本地化家族名，
 方便系统和应用自动挑到合适的那个。
 
-## 已知差异
+## 已修正的上游源字体问题
 
 - **SC 的 Text 字重偏细约 5%**：IBM 发布的 Plex Sans SC，Text 的插值位置是 425，
-  JP / TC 是 450。这是上游源字体的差异，本里程碑不处理。
+  JP / TC 是 450，结果四个地区并排时只有 SC 的 Text 偏细。
+  **已通过从母版按 450 重新生成解决。**
+
+  `regen_sc_text.py` 从 IBM 公开的 Glyphs 母版（release `@ibm/plex-sans-sc@1.1.0`
+  的附件 `sources.zip`，URL 与 SHA-256 记在 `sources.lock`）取出
+  `sources/masters/IBM Plex Sans SC.glyphs`，把 `name = "Text"` 那个实例的
+  `interpolationWeight` 从 425 改成 450，用 fontmake 只插值出 Text 一个字重，
+  再把 cmap / name / OS/2 对齐到 IBM 发布件。其余七个字重仍然直接用发布件，
+  由 `build.ini` 的 `REGENERATED_STYLES = SC:Text` 控制。
+
+  验证：重新生成的 SC Text「一」横画 84、「丨」竖画 89，与 JP / TC 的 Text
+  完全一致（发布件是 80 / 84）；cmap 与 SC 其他字重完全相同（29,286 个码位）。
+  同一套流程按 360 重新生成 Regular 得到 68 / 70，与发布件一致，说明流程本身忠实。
+  `check_fonts.py` 因此去掉了 SC Text 的粗细例外，容差也从 8% 收紧到 5%。
+
+## 已知差异
+
 - **JIS X 0213 缺 2 字**：`U+2985` / `U+2986`。
 - **裁掉了部分 GSUB 异体字**：为了让 Nerd Fonts 版（+10,522 字形）留在
   65,535 字形以内，丢掉了宽度变体（`pwid`/`hwid`/`fwid`/`twid`/`qwid`）、
@@ -234,10 +250,15 @@ region's IBM Plex Sans.
   letters (`U+FFA1–FFDC`) stay halfwidth.
 - **One file.** `otb-ttc-bundle -x` packs the four subfonts of each
   (variant, style) into a single `.ttc` with a shared `glyf` table.
-- **Known issues.** IBM's SC Text weight is ~5% lighter than JP/TC; `U+2985`
-  and `U+2986` are absent from all four Plex Sans fonts; width-variant,
-  vertical and Japanese itaiji GSUB features are dropped to fit the Nerd Fonts
-  build under 65,535 glyphs.
+- **SC Text rebuilt from the master source.** IBM ships Plex Sans SC Text
+  interpolated at 425 while JP/TC use 450, so SC Text came out ~5% lighter.
+  `regen_sc_text.py` pulls IBM's Glyphs master from the `@ibm/plex-sans-sc`
+  release, sets the Text instance to 450 and rebuilds that one weight with
+  fontmake: the horizontal stroke of 一 is now 84 and the vertical stroke of
+  丨 is 89, exactly matching JP and TC.
+- **Known issues.** `U+2985` and `U+2986` are absent from all four Plex Sans
+  fonts; width-variant, vertical and Japanese itaiji GSUB features are dropped
+  to fit the Nerd Fonts build under 65,535 glyphs.
 
 See [docs/PlemoCJK-plan.md](docs/PlemoCJK-plan.md) for the full design.
 
@@ -260,8 +281,11 @@ ASCII 部分の見た目は PlemolJP と変わりません。
   半角ハングル字母 (`U+FFA1–FFDC`) は半角のまま。
 - **1 ファイル配布**: `otb-ttc-bundle -x` で 4 サブフォントを 1 つの `.ttc` にまとめ、
   `glyf` を共有する。
-- **既知の差異**: IBM 版 Plex Sans SC の Text は JP/TC より約 5% 細い。
-  `U+2985` / `U+2986` は 4 つの Plex Sans すべてに無い。
+- **SC の Text は母版から作り直す**: IBM 発布の Plex Sans SC Text は補間位置が
+  425 で JP / TC (450) より約 5% 細い。`regen_sc_text.py` が IBM の Glyphs 母版を
+  450 に書き換えてこの 1 ウェイトだけ作り直す。「一」の横画 84、「丨」の縦画 89 で
+  JP / TC と一致する (発布件は 80 / 84)。
+- **既知の差異**: `U+2985` / `U+2986` は 4 つの Plex Sans すべてに無い。
   Nerd Fonts 版を 65,535 グリフ以内に収めるため、幅バリアント・縦組み・
   日本語異体字の GSUB feature を落としている。
 
