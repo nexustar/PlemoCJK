@@ -1,0 +1,213 @@
+name: Build PlemoCJK
+
+on:
+  push:
+    branches: [main, cjk]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      variant_set:
+        description: "default (3 variants) or full (all 10)"
+        type: choice
+        default: default
+        options: [default, full]
+      debug:
+        description: "Regular weight only (fast smoke build)"
+        type: boolean
+        default: false
+
+env:
+  BUILDER_IMAGE: ghcr.io/yuru7/composite-font-builder
+  # 地域 x バリアント を別ジョブに分けるので、1 ジョブ内の並列は 2 で十分
+  MAX_PARALLEL: "2"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 地域別の CJK 側入力フォントを 1 回だけ作って共有する。
+  # 4 地域 x 3 バリアント = 12 ジョブが同じものを作り直すのは無駄なため。
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      variants: ${{ steps.matrix.outputs.variants }}
+      regions: ${{ steps.matrix.outputs.regions }}
+      styles: ${{ steps.matrix.outputs.styles }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install "fonttools==4.63.0"
+
+      - name: Resolve build matrix
+        id: matrix
+        env:
+          VARIANT_SET: ${{ inputs.variant_set || 'default' }}
+          DEBUG_BUILD: ${{ inputs.debug || 'false' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          import plemocjk_config
+          config = plemocjk_config.load()
+          full = os.environ.get("VARIANT_SET") == "full"
+          variants = config.full_variants if full else config.default_variants
+          debug = os.environ.get("DEBUG_BUILD") == "true"
+          styles = ["Regular"] if debug else list(plemocjk_config.UPRIGHT_STYLES)
+          print("variants=" + json.dumps(variants))
+          print("regions=" + json.dumps(list(config.regions)))
+          print("styles=" + json.dumps(styles))
+          PY
+
+      - name: Cache IBM Plex sources
+        id: plex-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            source/IBM-Plex-Sans-SC
+            source/IBM-Plex-Sans-TC
+            source/IBM-Plex-Sans-KR
+          key: plex-sources-${{ hashFiles('sources.lock') }}
+
+      - name: Fetch and verify IBM Plex sources
+        run: python3 fetch_sources.py
+
+      - name: Prepare per-region CJK fonts
+        env:
+          STYLES_JSON: ${{ steps.matrix.outputs.styles }}
+        run: |
+          python3 prepare_cjk.py --report
+          styles="$(python3 -c "import json, os; print(','.join(json.loads(os.environ['STYLES_JSON'])))")"
+          python3 prepare_cjk.py --styles "$styles"
+
+      - name: Check prepared fonts
+        run: python3 check_fonts.py --prepared
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prepared-cjk
+          path: source/prepared/*.ttf
+          retention-days: 1
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
+  # 地域 x バリアント で並列ビルド。上流の composite-font-builder イメージを使う。
+  # ---------------------------------------------------------------------------
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: ${{ fromJson(needs.prepare.outputs.regions) }}
+        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prepared-cjk
+          path: source/prepared
+
+      # イメージには git も node も入っていないので、コンテナジョブにはせず
+      # HOW_TO_BUILD.md と同じ docker run で呼ぶ
+      - name: Build ${{ matrix.variant }} ${{ matrix.region }}
+        env:
+          REGIONS: ${{ matrix.region }}
+          VARIANTS: ${{ matrix.variant }}
+          SKIP_PREPARE: "1"
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+        run: |
+          chmod +x ./make.sh
+          docker run --rm \
+            -e REGIONS -e VARIANTS -e SKIP_PREPARE -e DEBUG -e MAX_PARALLEL \
+            -v "$PWD:/work" "$BUILDER_IMAGE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ttf-${{ matrix.variant }}-${{ matrix.region }}
+          path: build/*.ttf
+          retention-days: 7
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
+  # 全地域が揃ってから TTC に束ねて検査する。
+  # ---------------------------------------------------------------------------
+  bundle:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: pip install "fonttools==4.63.0"
+
+      - name: Collect all region TTFs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ttf-*
+          path: build
+          merge-multiple: true
+
+      - run: ls -la build && python3 check_generated_fonts.py build/*.ttf
+
+      - name: Install otb-ttc-bundle
+        run: npm ci || npm install
+
+      - name: Bundle TTC
+        env:
+          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
+        run: |
+          # ot-builder は 4 x 5 万グリフで数 GB 使うのでヒープを広く取る
+          for variant in $VARIANTS; do
+            node --max-old-space-size=8192 bundle_ttc.mjs --variant "$variant"
+          done
+          ls -la build/ttc
+
+      - name: Check fonts and TTC
+        env:
+          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
+        run: |
+          status=0
+          for variant in $VARIANTS; do
+            python3 check_fonts.py --variant "$variant" || status=1
+          done
+          for ttc in build/ttc/*.ttc; do
+            python3 check_fonts.py --ttc "$ttc" || status=1
+          done
+          exit $status
+
+      # release.sh は zip / unzip を必須にしている。フォント生成に使う
+      # composite-font-builder イメージには入っていないので、パッケージングは
+      # コンテナではなく runner のホスト側で実行する。
+      # ubuntu-latest には両方入っているが、イメージが変わっても落ちないように
+      # 念のため確認してから入れる。
+      - name: Package release archives
+        run: |
+          if ! command -v zip >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+          ./release.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlemoCJK-release
+          path: build/release/*.zip
+          retention-days: 14
+          compression-level: 0
+
+      - name: Attach archives to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/release/*.zip
