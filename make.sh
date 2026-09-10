@@ -89,6 +89,30 @@ else
     )
 fi
 
+# VARIANTS でビルドするバリアントを絞れるようにする
+# 値はファイル名の修飾子で指定する (例: VARIANTS="Console- 35ConsoleNF-")
+if [ -n "${VARIANTS:-}" ]; then
+    read -r -a wanted_variants <<<"$VARIANTS"
+    selected_variants=()
+    for item in "${variants[@]}"; do
+        for wanted in "${wanted_variants[@]}"; do
+            if [ "${item#*|}" = "$wanted" ]; then
+                selected_variants+=("$item")
+                break
+            fi
+        done
+    done
+    if [ ${#selected_variants[@]} -eq 0 ]; then
+        echo "ERROR: VARIANTS に一致するバリアントがありません: ${VARIANTS}" >&2
+        echo -n "  指定できる値: " >&2
+        for item in "${variants[@]}"; do printf '%s ' "${item#*|}" >&2; done
+        echo >&2
+        exit 1
+    fi
+    variants=("${selected_variants[@]}")
+    echo "### Selected variants: ${VARIANTS} ###"
+fi
+
 fail=0
 
 for item in "${variants[@]}"; do
