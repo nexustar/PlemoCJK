@@ -9,6 +9,7 @@ Docker を使って PlemolJP をビルドする手順です。
 ### 必要なもの
 
 - [Docker](https://docs.docker.com/get-docker/)
+- `zip` / `unzip`（`release.sh` が配布用アーカイブの作成と検査に使います。ビルドイメージには入っていないので、ホスト側に入れてください。Debian/Ubuntu なら `sudo apt-get install -y zip unzip`）
 
 ソースフォント（IBM Plex Mono / Sans JP など）は本プロジェクトの `source/` に含まれている前提です。
 
@@ -46,7 +47,7 @@ Ubuntu 24.04 系では、おおむね次のパッケージが必要です。
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y fontforge python3 python3-fontforge python3-pip ttfautohint
+sudo apt-get install -y fontforge python3 python3-fontforge python3-pip ttfautohint zip unzip
 python3 -m pip install --break-system-packages fonttools ttfautohint-py
 ./make.sh
 ```
@@ -62,3 +63,64 @@ python3 -m pip install --break-system-packages fonttools ttfautohint-py
 ```
 
 こちらは全バリアントを並列ビルドし、`release_files/` 以下に整理して出力します。
+
+---
+
+## Building PlemoCJK (regional subfonts)
+
+PlemoCJK builds SC / TC / JP / KR regional subfonts. The process is similar
+to upstream, with additional steps for fetching source fonts and preparing
+per-region CJK input fonts.
+
+```bash
+# 1. Fetch source fonts (SC/TC/KR download + SHA-256 verification; JP is in the repo)
+python3 fetch_sources.py
+
+# 1b. Regenerate SC Text from the Glyphs master at weight 450
+#     (IBM release uses 425, ~5% thinner than JP/TC)
+#     The master zip is 186MB; fontmake needs a few minutes and ~3GB memory
+pip install "fontmake[pathops]"
+python3 regen_sc_text.py
+
+# 2. Build (make.sh also calls prepare_cjk.py)
+docker run --rm -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
+
+# 3. Bundle 4 regions into a single TTC (needs node on the host)
+npm install
+node --max-old-space-size=8192 bundle_ttc.mjs
+
+# 4. Check
+python3 check_fonts.py --variant default --ttc build/ttc/PlemoCJK-Regular.ttc
+
+# 5. Package (needs zip/unzip on the host)
+./release.sh
+```
+
+Quick smoke test (one file only):
+
+```bash
+docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
+```
+
+### make.sh environment variables
+
+| Variable | Description |
+|---|---|
+| `DEBUG=1` | Regular weight only. If `VARIANTS`/`REGIONS` are not set, builds Term x first region |
+| `REGIONS="SC KR"` | Limit regions (default: `[regions] REGIONS` in build.ini) |
+| `VARIANTS="Console ConsoleNF"` | Specify variants directly |
+| `STYLES="Text TextItalic"` | Specify styles (weights) directly. Overrides `DEBUG` and also limits `prepare_cjk.py` |
+| `SKIP_PREPARE=1` | Skip `prepare_cjk.py` when `source/prepared/` already exists |
+| `MAX_PARALLEL=4` | Parallelism for region x variant |
+
+### Build stages
+
+0. `regen_sc_text.py` produces `source/regenerated/IBMPlexSansSC-Text.ttf`
+   (re-interpolates SC Text at weight 450 from the IBM Glyphs master;
+   `build.ini` `REGENERATED_STYLES` tells the build to use it instead of the IBM release)
+1. `prepare_cjk.py` produces `source/prepared/PlemoCJK-{region}-{style}.ttf`
+   (per-region fallback fill + hangul)
+2. Build the eng side once per variant
+   (`fontforge_script.py --eng-only` + ttfautohint); reused by all 4 regions
+3. Build region x variant in parallel
+   (`fontforge_script.py --region XX` → `fonttools_script.py <tag> <region>`)

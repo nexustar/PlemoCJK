@@ -1,0 +1,13 @@
+{
+  "name": "plemocjk-ttc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TTC bundling for PlemoCJK: pack the SC/TC/JP/KR subfonts of one (variant, style) into a single .ttc with shared glyf",
+  "type": "module",
+  "scripts": {
+    "bundle": "node --max-old-space-size=8192 bundle_ttc.mjs"
+  },
+  "dependencies": {
+    "otb-ttc-bundle": "1.8.1"
+  }
+}

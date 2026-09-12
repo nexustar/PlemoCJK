@@ -1,0 +1,271 @@
+name: Build PlemoCJK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Regular weight only (fast smoke build)"
+        type: boolean
+        default: false
+
+env:
+  BUILDER_IMAGE: ghcr.io/yuru7/composite-font-builder
+  # Region x variant are split into separate jobs, so 2 parallel tasks per job is sufficient
+  MAX_PARALLEL: "2"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The IBM-released Plex Sans SC Text has interpolation weight 425, about 5%
+  # thinner than JP / TC (450), so we regenerate it at 450 from the IBM Glyphs
+  # master source. The master zip is 186 MB and fontmake needs a few minutes
+  # plus ~3 GB of memory, so this runs as a separate cached job (prepare uses the artifact).
+  # ---------------------------------------------------------------------------
+  regen-sc-text:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # Cache the master zip and the regenerated font together.
+      # sources.lock contains the zip URL and SHA-256, so we only
+      # rebuild when the lock file or the script changes.
+      - name: Cache regenerated SC Text
+        id: regen-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            source/ibm-plex-sans-sc-sources.zip
+            source/regenerated
+          key: >-
+            sc-text-450-${{ hashFiles('sources.lock') }}-${{
+            hashFiles('regen_sc_text.py') }}
+
+      # The released SC is needed as a reference for cmap / name alignment and --check,
+      # so fetch it even on a cache hit (uses a different key from the prepare cache)
+      - name: Cache IBM Plex Sans SC release
+        uses: actions/cache@v5
+        with:
+          path: source/IBM-Plex-Sans-SC
+          key: plex-sources-sc-${{ hashFiles('sources.lock') }}
+
+      - name: Install fontmake
+        run: pip install "fontmake[pathops]"
+
+      - name: Fetch IBM Plex Sans SC release
+        run: python3 fetch_sources.py --regions SC
+
+      - name: Regenerate SC Text at interpolation weight 450
+        if: steps.regen-cache.outputs.cache-hit != 'true'
+        run: python3 regen_sc_text.py
+
+      - name: Verify regenerated SC Text
+        run: python3 regen_sc_text.py --check
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: regenerated-sc-text
+          path: source/regenerated/*.ttf
+          retention-days: 1
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
+  # Build per-region CJK input fonts once and share them.
+  # Avoids 4 regions x 2 variants = 8 jobs redundantly rebuilding the same thing.
+  # ---------------------------------------------------------------------------
+  prepare:
+    needs: regen-sc-text
+    runs-on: ubuntu-latest
+    outputs:
+      variants: ${{ steps.matrix.outputs.variants }}
+      regions: ${{ steps.matrix.outputs.regions }}
+      styles: ${{ steps.matrix.outputs.styles }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - run: pip install "fonttools==4.63.0"
+
+      - name: Resolve build matrix
+        id: matrix
+        env:
+          DEBUG_BUILD: ${{ inputs.debug || 'false' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          import plemocjk_config
+          config = plemocjk_config.load()
+          variants = config.default_variants
+          debug = os.environ.get("DEBUG_BUILD") == "true"
+          styles = ["Regular"] if debug else list(plemocjk_config.UPRIGHT_STYLES)
+          print("variants=" + json.dumps(variants))
+          print("regions=" + json.dumps(list(config.regions)))
+          print("styles=" + json.dumps(styles))
+          PY
+
+      - name: Cache IBM Plex sources
+        id: plex-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            source/IBM-Plex-Sans-SC
+            source/IBM-Plex-Sans-TC
+            source/IBM-Plex-Sans-KR
+          key: plex-sources-${{ hashFiles('sources.lock') }}
+
+      - name: Fetch and verify IBM Plex sources
+        run: python3 fetch_sources.py
+
+      # Receive the SC Text (weight 450) pointed to by REGENERATED_STYLES in build.ini.
+      # prepare_cjk.py errors out without it
+      - uses: actions/download-artifact@v5
+        with:
+          name: regenerated-sc-text
+          path: source/regenerated
+
+      - name: Prepare per-region CJK fonts
+        env:
+          STYLES_JSON: ${{ steps.matrix.outputs.styles }}
+        run: |
+          python3 prepare_cjk.py --report
+          styles="$(python3 -c "import json, os; print(','.join(json.loads(os.environ['STYLES_JSON'])))")"
+          python3 prepare_cjk.py --styles "$styles"
+
+      - name: Check prepared fonts
+        run: python3 check_fonts.py --prepared
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: prepared-cjk
+          path: source/prepared/*.ttf
+          retention-days: 1
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
+  # Parallel build across region x variant. Uses the upstream composite-font-builder image.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: ${{ fromJson(needs.prepare.outputs.regions) }}
+        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: prepared-cjk
+          path: source/prepared
+
+      # The image lacks git and node, so instead of a container job
+      # we invoke it via docker run, same as HOW_TO_BUILD.md
+      - name: Build ${{ matrix.variant }} ${{ matrix.region }}
+        env:
+          REGIONS: ${{ matrix.region }}
+          VARIANTS: ${{ matrix.variant }}
+          SKIP_PREPARE: "1"
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+        run: |
+          chmod +x ./make.sh
+          docker run --rm \
+            -e REGIONS -e VARIANTS -e SKIP_PREPARE -e DEBUG -e MAX_PARALLEL \
+            -v "$PWD:/work" "$BUILDER_IMAGE"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ttf-${{ matrix.variant }}-${{ matrix.region }}
+          path: build/*.ttf
+          retention-days: 7
+          compression-level: 1
+
+  # ---------------------------------------------------------------------------
+  # Bundle into TTC and verify after all regions are built.
+  # ---------------------------------------------------------------------------
+  bundle:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - run: pip install "fonttools==4.63.0"
+
+      - name: Collect all region TTFs
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ttf-*
+          path: build
+          merge-multiple: true
+
+      - run: ls -la build && python3 check_generated_fonts.py build/*.ttf
+
+      - name: Install otb-ttc-bundle
+        run: npm ci || npm install
+
+      - name: Bundle TTC
+        env:
+          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
+        run: |
+          # ot-builder uses several GB for 4 x 50k glyphs, so increase the heap
+          for variant in $VARIANTS; do
+            node --max-old-space-size=8192 bundle_ttc.mjs --variant "$variant"
+          done
+          ls -la build/ttc
+
+      - name: Check fonts and TTC
+        env:
+          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
+        run: |
+          status=0
+          for variant in $VARIANTS; do
+            python3 check_fonts.py --variant "$variant" || status=1
+          done
+          for ttc in build/ttc/*.ttc; do
+            python3 check_fonts.py --ttc "$ttc" || status=1
+          done
+          exit $status
+
+      # release.sh requires zip / unzip. They are not included in the
+      # composite-font-builder image used for font generation, so packaging
+      # runs on the runner host rather than in a container.
+      # ubuntu-latest ships both, but we verify and install just in case
+      # the image changes.
+      - name: Package release archives
+        run: |
+          if ! command -v zip >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+          ./release.sh
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: PlemoCJK-release
+          path: build/release/*.zip
+          retention-days: 14
+          compression-level: 0
+
+      - name: Create release and upload archives
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release create "${{ github.ref_name }}" build/release/*.zip
+        env:
+          GH_TOKEN: ${{ github.token }}

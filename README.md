@@ -1,43 +1,44 @@
-# PlemolJP (プレモル ジェイピー)
+# PlemoCJK
 
-***Ple***x ***Mo***no ***L***anguage ***JP***
+***Ple***x ***Mo***no ***CJK*** -- a monospaced programming font that extends
+[PlemolJP](https://github.com/yuru7/PlemolJP) from Japanese to
+Simplified Chinese / Traditional Chinese / Japanese / Korean.
 
-IBM Plex Mono と IBM Plex Sans JP を合成した日本語プログラミングフォント PlemolJP (プレモル ジェイピー)
+**[中文说明](README-zh.md)**
 
-**ダウンロードはこちら ➡ [Releases](https://github.com/yuru7/PlemolJP/releases/latest)**
+Four regional subfonts (SC / TC / JP / KR), each pairing IBM Plex Mono with
+that region's IBM Plex Sans.
 
-> 💡 [Homebrew (Mac) でのインストール方法](doc/install_via_homebrew.md)
+Two variants:
 
-![image](https://github.com/yuru7/PlemolJP/raw/images/beer.jpg)
+| Variant | Half / full (px) | Arrows, symbols | Full-width space | Nerd Fonts |
+|---|:---:|:---:|:---:|:---:|
+| **default** | 528 / 1056 | full | hidden | - |
+| **Term** | 600 / 1200 | half | visible | half |
 
-PlemolJP では合成元の [IBM Plex Mono](https://github.com/IBM/plex) シリーズと同様に、ノーマル・イタリックの両スタイルに対応しました。また、各スタイルごとに8種のウェイト (Thin~Bold) をご用意しています。  
+## Building
 
-さらに日本語環境でのプログラミングでつまずきがちな全角スペースの誤入力に気づけるよう、全角スペースを可視化する修正を加えています。  
+```bash
+# 1. Fetch source fonts (SC/TC/KR download + SHA-256 verification; JP is in the repo)
+python3 fetch_sources.py
 
-> 💡 全角スペースの可視化が不要な場合は、リリースの Assets より `PlemolJP_HS_vx.x.x.zip` の名前形式になっている zip ファイルを選択してください。(HS: Hidden Space)
+# 2. Build (the upstream image has fontforge / ttfautohint)
+docker run --rm -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
 
-> 💡 Powerline 記号等が含まれる Nerd Fonts 対応版は、リリースの Assets より `PlemolJP_NF_vx.x.x.zip` の名前形式になっている zip ファイルを選択してください。(NF: Nerd Fonts)
+# Quick smoke test: produce only Term Regular for one region
+docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builder
 
-|**フォント ファミリー**|**説明**|
-|:------------:|:---|
-|**PlemolJP**|文字幅比率「半角1:全角2」の通常版の PlemolJP。主にASCIIコードの英数字記号に IBM Plex Mono の字体を使い、その他の日本語文字や記号類に IBM Plex Sans JP を使っている。|
-|**PlemolJP Console**|IBM Plex Mono の字体を除外せずに全て適用したフォントファミリー。矢印記号などの多くの記号が半角で表示されるため、コンソールでの利用や記号類は可能な限り半角で表示したい人にオススメ。|
-|**PlemolJP35**|通常版の PlemolJP の文字幅比率を「半角3:全角5」にしたフォントファミリー。英数字が通常版の PlemolJP よりも大きく表示される。日本語が少ない文書やコードの場合にはこちらの方が読みやすいと感じるかもしれない。|
-|**PlemolJP35 Console**|PlemolJP Console の文字幅比率を 半角3:全角5 にしたフォントファミリー|
+# 3. Bundle into TTC
+npm install
+node --max-old-space-size=8192 bundle_ttc.mjs
 
-> 💡 その他、公開中のプログラミングフォント
-> - 日本語文字に源柔ゴシック、英数字部分に Hack を使った [**白源 (はくげん／HackGen)**](https://github.com/yuru7/HackGen)
-> - 日本語文字に源真ゴシック、英数字部分に Fira Mono を使った [**Firge (ファージ)**](https://github.com/yuru7/Firge)
-> - 日本語文字にBIZ UDゴシック、英数字部分に JetBrains Mono を使った [**UDEV Gothic**](https://github.com/yuru7/udev-gothic)
+# 4. Check
+python3 check_fonts.py --variant default --ttc build/ttc/PlemoCJK-Regular.ttc
 
-|Thin|ExtraLight|Light|Regular|
-|:---:|:---:|:---:|:---:|
-|![Thin](https://user-images.githubusercontent.com/13458509/133928702-21f1f391-e83a-4825-9059-36cf3d35f6f7.png)|![ExtraLight](https://user-images.githubusercontent.com/13458509/133928717-f5e17c66-b4e1-47fe-950f-ca3bc574a874.png)|![Light](https://user-images.githubusercontent.com/13458509/133928734-3ca98395-97b9-417b-96a1-ef83f614739a.png)|![Regular](https://user-images.githubusercontent.com/13458509/133928745-fe85ba2e-0d5e-406c-9d23-c832e11bc7b4.png)|
+# 5. Package
+./release.sh
+```
 
-|Text|Medium|SemiBold|Bold|
-|:---:|:---:|:---:|:---:|
-|![Text](https://user-images.githubusercontent.com/13458509/133928757-af5b6b82-5e1f-41bb-a925-f03769bdad00.png)|![Medium](https://user-images.githubusercontent.com/13458509/133928766-a4b22651-cc1c-48d7-b729-15a6a4070f44.png)|![SemiBold](https://user-images.githubusercontent.com/13458509/133928774-d8467d02-c301-4bef-84e5-1702f9f9645d.png)|![Bold](https://user-images.githubusercontent.com/13458509/133928784-7cc5f571-1161-41de-81b8-b97573e3f524.png)|
+See [HOW_TO_BUILD.md](./HOW_TO_BUILD.md) for details.
 
-## ビルド
-
-[HOW_TO_BUILD.md](./HOW_TO_BUILD.md) 参考
+Based on [PlemolJP](https://github.com/yuru7/PlemolJP) v3.1.0.
