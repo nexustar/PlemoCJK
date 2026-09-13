@@ -37,8 +37,10 @@ INVISIBLE_ZENKAKU_SPACE_STR = settings.get("DEFAULT", "INVISIBLE_ZENKAKU_SPACE_S
 NERD_FONTS_STR = settings.get("DEFAULT", "NERD_FONTS_STR")
 EM_ASCENT = int(settings.get("DEFAULT", "EM_ASCENT"))
 EM_DESCENT = int(settings.get("DEFAULT", "EM_DESCENT"))
-OS2_ASCENT = int(settings.get("DEFAULT", "OS2_ASCENT"))
-OS2_DESCENT = int(settings.get("DEFAULT", "OS2_DESCENT"))
+TYPO_ASCENT = int(settings.get("DEFAULT", "TYPO_ASCENT"))
+TYPO_DESCENT = int(settings.get("DEFAULT", "TYPO_DESCENT"))
+WIN_ASCENT = int(settings.get("DEFAULT", "WIN_ASCENT"))
+WIN_DESCENT = int(settings.get("DEFAULT", "WIN_DESCENT"))
 HALF_WIDTH_12 = int(settings.get("DEFAULT", "HALF_WIDTH_12"))
 FULL_WIDTH_35 = int(settings.get("DEFAULT", "FULL_WIDTH_35"))
 FULL_WIDTH_36 = int(settings.get("DEFAULT", "FULL_WIDTH_36"))
@@ -1145,22 +1147,15 @@ def edit_meta_data(font, weight: str, variant: str, cap_height: int, x_height: i
     font.ascent = EM_ASCENT
     font.descent = EM_DESCENT
 
-    if (WIDTH_35_STR in variant or WIDTH_36_STR in variant) and not options.get("nerd-font"):
-        os2_ascent = OS2_ASCENT + 60
-        os2_descent = OS2_DESCENT + 60
-    else:
-        os2_ascent = OS2_ASCENT
-        os2_descent = OS2_DESCENT
+    font.os2_winascent = WIN_ASCENT
+    font.os2_windescent = WIN_DESCENT
 
-    font.os2_winascent = os2_ascent
-    font.os2_windescent = os2_descent
-
-    font.os2_typoascent = os2_ascent
-    font.os2_typodescent = -os2_descent
+    font.os2_typoascent = TYPO_ASCENT
+    font.os2_typodescent = -TYPO_DESCENT
     font.os2_typolinegap = 0
 
-    font.hhea_ascent = os2_ascent
-    font.hhea_descent = -os2_descent
+    font.hhea_ascent = TYPO_ASCENT
+    font.hhea_descent = -TYPO_DESCENT
     font.hhea_linegap = 0
 
     font.os2_xheight = x_height
