@@ -20,3 +20,5 @@ source/regenerated/
 node_modules/
 __pycache__/
 *.pyc
+# subset_webfont.py が Google Fonts CSS から取得した切片定義のキャッシュ
+.webfont_cache/
