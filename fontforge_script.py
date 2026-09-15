@@ -828,9 +828,11 @@ def transform_half_width(jp_font, eng_font):
     """1:2幅になるように変換する"""
     before_width_eng = eng_font[0x0030].width
     after_width_eng = HALF_WIDTH_12
-    # 単純な 縮小後幅 / 元の幅 だと狭くなりすりぎるので、
-    # 倍率を考慮して分子は大きめにしている
-    x_scale = 546 / before_width_eng
+    # 単純な 縮小後幅 / 元の幅 だと狭くなりすぎるので、分子は大きめにする。
+    # Keep the original 546-for-528 anti-condense margin proportional to
+    # HALF_WIDTH_12 (540 -> ~558), so widening the advance also widens the ink
+    # instead of only adding side-bearing.
+    x_scale = after_width_eng * (546 / 528) / before_width_eng
     for glyph in eng_font.glyphs():
         if glyph.width > 0:
             # リガチャ考慮

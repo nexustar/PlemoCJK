@@ -13,7 +13,7 @@ Two variants:
 
 | Variant | Half / full (px) | Arrows, symbols | Full-width space | Nerd Fonts |
 |---|:---:|:---:|:---:|:---:|
-| **default** | 528 / 1056 | full | hidden | - |
+| **default** | 540 / 1080 | full | hidden | - |
 | **Term** | 600 / 1200 | half | visible | half |
 
 ## Building
