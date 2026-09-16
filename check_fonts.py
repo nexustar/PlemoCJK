@@ -455,7 +455,7 @@ def discover(
     variant with the most files.
     """
     per_variant: dict[str, dict[tuple[str, str], Path]] = {}
-    variants = [variant] if variant else list(plemocjk_config.VARIANT_TABLE)
+    variants = [variant] if variant else list(plemocjk_config.VARIANTS)
     for name in variants:
         found: dict[tuple[str, str], Path] = {}
         for region in config.regions:

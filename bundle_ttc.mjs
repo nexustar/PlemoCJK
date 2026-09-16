@@ -102,19 +102,14 @@ function parseArgs(argv) {
   return options;
 }
 
-// Modifier templates matching build.ini conventions (plemocjk_config.VARIANT_TABLE)
+// Variant name -> file-tag template. Kept in sync by hand with the Python
+// source of truth, plemocjk_config.VARIANTS: add a new variant to both.
 const VARIANT_TAGS = {
   default: "{R}",
-  35: "35{R}",
-  Console: "Console{R}",
-  "35Console": "35Console{R}",
-  ConsoleNF: "ConsoleNF{R}",
-  "35ConsoleNF": "35ConsoleNF{R}",
-  HS: "HS{R}",
-  "35HS": "35HS{R}",
-  ConsoleHS: "ConsoleHS{R}",
-  "35ConsoleHS": "35ConsoleHS{R}",
   Term: "Term{R}",
+  // Planned (add here together with plemocjk_config.VARIANTS):
+  // Nature: "Nature{R}",
+  // Wide: "Wide{R}",
 };
 
 const REGION_LIST = ["SC", "TC", "JP", "KR"];

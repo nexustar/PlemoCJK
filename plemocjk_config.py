@@ -40,20 +40,61 @@ ALL_STYLES = tuple(
     + [f"{s}Italic" if s != "Regular" else "Italic" for s in UPRIGHT_STYLES]
 )
 
-# Variant name -> (fontforge_script.py options, name modifier template)
-# {R} is replaced with the region label
-VARIANT_TABLE = {
-    "default": ("--hidden-zenkaku-space", "{R}"),
-    "35": ("--35", "35{R}"),
-    "Console": ("--console", "Console{R}"),
-    "35Console": ("--console --35", "35Console{R}"),
-    "ConsoleNF": ("--console --nerd-font", "ConsoleNF{R}"),
-    "35ConsoleNF": ("--console --35 --nerd-font", "35ConsoleNF{R}"),
-    "HS": ("--hidden-zenkaku-space", "HS{R}"),
-    "35HS": ("--hidden-zenkaku-space --35", "35HS{R}"),
-    "ConsoleHS": ("--hidden-zenkaku-space --console", "ConsoleHS{R}"),
-    "35ConsoleHS": ("--hidden-zenkaku-space --console --35", "35ConsoleHS{R}"),
-    "Term": ("--console --nerd-font --36", "Term{R}"),
+@dataclass(frozen=True)
+class Variant:
+    """A build variant defined by explicit feature flags.
+
+    Behaviour comes only from the flags below. `label` is output-only: it feeds
+    the family name and the file tag, and is never parsed back into behaviour.
+    It defaults to `key`; the unmarked `default` variant sets it to "".
+    """
+
+    key: str                        # registry id, used by build.ini / make.sh
+    label: str | None = None        # name suffix; defaults to key, "" for default
+    width_mode: str = "12"          # "12" | "35" | "36"
+    console: bool = False
+    nerd_font: bool = False
+    hidden_zenkaku_space: bool = False
+
+    def __post_init__(self) -> None:
+        if self.label is None:
+            object.__setattr__(self, "label", self.key)
+
+    def flags(self) -> list[str]:
+        """fontforge_script.py options for this variant."""
+        out: list[str] = []
+        if self.hidden_zenkaku_space:
+            out.append("--hidden-zenkaku-space")
+        if self.console:
+            out.append("--console")
+        if self.nerd_font:
+            out.append("--nerd-font")
+        if self.width_mode == "35":
+            out.append("--35")
+        elif self.width_mode == "36":
+            out.append("--36")
+        return out
+
+    def tag(self, region: str = "") -> str:
+        """File/name tag: label + region, e.g. 'TermSC', 'Term', or 'SC'."""
+        return f"{self.label}{region}"
+
+    def family_name(self, font_name: str, region: str) -> str:
+        """Display family name, e.g. 'PlemoCJK Term SC' or 'PlemoCJK SC'."""
+        parts = [p for p in (self.label, region) if p]
+        return " ".join([font_name, *parts]) if parts else font_name
+
+
+# Shipped variants. Add a row to ship another one; nothing parses the name.
+VARIANTS: dict[str, Variant] = {
+    v.key: v
+    for v in [
+        Variant("default", label="", hidden_zenkaku_space=True),
+        Variant("Term", width_mode="36", console=True, nerd_font=True),
+        # Planned (verified to build; enable when shipping):
+        # Variant("Nature", width_mode="35", hidden_zenkaku_space=True),
+        # Variant("Wide", width_mode="36", hidden_zenkaku_space=True),
+    ]
 }
 
 
@@ -90,21 +131,22 @@ def hyphenate_tag(tag: str) -> str:
     return "-".join(parts)
 
 
-def width_mode_for_tag(tag: str) -> str:
-    """Return '36', '35', or '12' for a variant identified by its file tag.
+def width_mode_for_variant(variant: str) -> str:
+    """Return '12' | '35' | '36' for a variant key (no name parsing)."""
+    return VARIANTS[variant].width_mode
 
-    Works with both bare tags (e.g. 'Term') and full tags (e.g. 'SCTerm').
+
+def width_mode_for_tag(tag: str) -> str:
+    """Return '12' | '35' | '36' for a file tag (label + optional region).
+
+    Matches the tag against the registry's own tags, so it stays correct for
+    editorial labels like 'Nature'/'Wide' that carry no width marker. Prefer
+    width_mode_for_variant in the build path; this is only for tools that have
+    just an output filename to work from.
     """
-    for _name, (opts, tmpl) in VARIANT_TABLE.items():
-        bare = tmpl.replace("{R}", "")
-        if bare == tag or any(
-            tmpl.replace("{R}", r) == tag for r in ("SC", "TC", "JP", "KR")
-        ):
-            if "--36" in opts:
-                return "36"
-            if "--35" in opts:
-                return "35"
-            return "12"
+    for v in VARIANTS.values():
+        if tag == v.tag() or any(tag == v.tag(r) for r in _REGIONS):
+            return v.width_mode
     return "12"
 
 
@@ -218,50 +260,25 @@ class Config:
         return expand_ranges(self.half_width_hangul_ranges)
 
     def variant_tag(self, variant: str, region: str) -> str:
-        """Build font name modifier from variant and region (e.g. SCConsoleNF)"""
-        return VARIANT_TABLE[variant][1].replace("{R}", region)
+        """File/name tag for a variant key + region (e.g. 'TermSC', 'SC')."""
+        return VARIANTS[variant].tag(region)
 
     def variant_options(self, variant: str) -> str:
-        return VARIANT_TABLE[variant][0]
+        return " ".join(VARIANTS[variant].flags())
 
     def variant_from_tag(self, tag: str, region: str) -> str:
-        """Reverse-lookup variant name from modifier (e.g. SCConsoleNF)"""
-        for variant in VARIANT_TABLE:
-            if self.variant_tag(variant, region) == tag:
-                return variant
+        """Registry lookup: which variant key produces this tag for this region."""
+        for key, variant in VARIANTS.items():
+            if variant.tag(region) == tag:
+                return key
         raise KeyError(f"unknown variant tag {tag!r} for region {region!r}")
 
     def family_from_tag(self, tag: str, region: str) -> str:
         return self.family_name(self.variant_from_tag(tag, region), region)
 
     def family_name(self, variant: str, region: str) -> str:
-        """Display family name (e.g. PlemoCJK35 Console SC)"""
-        tag = self.variant_tag(variant, region)
-        parts: list[str] = []
-        rest = tag
-        for prefix in ("36", "35"):
-            if rest.startswith(prefix):
-                parts.append(prefix)
-                rest = rest[len(prefix):]
-                break
-        if rest.endswith(region):
-            rest = rest[:-len(region)]
-        for marker in ("Term", "Console", "NF", "HS"):
-            if rest.startswith(marker):
-                parts.append(marker)
-                rest = rest[len(marker):]
-        for marker in ("NF", "HS"):
-            if rest.startswith(marker):
-                parts.append(marker)
-                rest = rest[len(marker):]
-        parts.append(region)
-        name = self.font_name
-        if parts and parts[0] in ("35", "36"):
-            name += parts[0]
-            parts = parts[1:]
-        if parts:
-            name += " " + " ".join(parts)
-        return name
+        """Display family name (e.g. 'PlemoCJK Term SC')."""
+        return VARIANTS[variant].family_name(self.font_name, region)
 
 
 def load(root: Path | None = None) -> Config:

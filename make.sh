@@ -138,7 +138,13 @@ print(plemocjk_config.load().variant_tag('$1', '$2'))"
 eng_tag() {
     python3 -c "
 import plemocjk_config
-print(plemocjk_config.VARIANT_TABLE['$1'][1].replace('{R}', ''))"
+print(plemocjk_config.VARIANTS['$1'].label)"
+}
+
+width_mode() {
+    python3 -c "
+import plemocjk_config
+print(plemocjk_config.width_mode_for_variant('$1'))"
 }
 
 file_tag() {
@@ -151,30 +157,32 @@ print(plemocjk_config.hyphenate_tag(plemocjk_config.load().variant_tag('$1', '$2
 # so build it once per variant and reuse the same files across all 4 regions.
 build_eng() {
     local variant="$1"
-    local options tag name_args
+    local options tag wmode
     options="$(variant_options "$variant")"
     tag="$(eng_tag "$variant")"
+    wmode="$(width_mode "$variant")"
     echo "FontForge (eng): ${variant} [${options}]"
     # shellcheck disable=SC2086
     fontforge -lang=py -script fontforge_script.py \
         --do-not-delete-build-dir --eng-only --variant-name "$tag" ${DEBUG_OPTS} ${STYLE_OPTS} ${options}
     echo "ttfautohint (eng): ${variant} [${tag}]"
-    python3 fonttools_script.py --eng-hint "${tag}-"
+    python3 fonttools_script.py --eng-hint "${tag}-" "${wmode}"
 }
 
 build_region() {
     local variant="$1"
     local region="$2"
-    local options tag
+    local options tag wmode
     options="$(variant_options "$variant")"
     tag="$(variant_tag "$variant" "$region")"
+    wmode="$(width_mode "$variant")"
     echo "FontForge (cjk): ${variant} ${region} [${options}]"
     # shellcheck disable=SC2086
     fontforge -lang=py -script fontforge_script.py \
         --do-not-delete-build-dir --region "${region}" --variant-name "${tag}" \
         ${DEBUG_OPTS} ${STYLE_OPTS} ${options}
-    echo "FontTools: ${tag} ${region}"
-    python3 fonttools_script.py "${tag}-" "${region}"
+    echo "FontTools: ${tag} ${region} [${wmode}]"
+    python3 fonttools_script.py "${tag}-" "${region}" "${wmode}"
 }
 
 fail=0

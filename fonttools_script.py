@@ -38,19 +38,22 @@ def usage():
 
 
 def main():
-    # 第一引数を取得
-    # 特定のバリエーションのみを処理するための指定
+    # width_mode ("12" | "35" | "36") is passed in explicitly by make.sh so that
+    # nothing here has to recover it by parsing the variant tag / file name.
     if len(sys.argv) > 1 and sys.argv[1] == "--eng-hint":
-        hint_eng_fonts(sys.argv[2] if len(sys.argv) > 2 else "")
+        eng_variant = sys.argv[2] if len(sys.argv) > 2 else ""
+        width_mode = sys.argv[3] if len(sys.argv) > 3 else "12"
+        hint_eng_fonts(eng_variant, width_mode)
         return
 
     specific_variant = sys.argv[1] if len(sys.argv) > 1 else None
     region = sys.argv[2] if len(sys.argv) > 2 else None
+    width_mode = sys.argv[3] if len(sys.argv) > 3 else "12"
 
-    edit_fonts(specific_variant, region)
+    edit_fonts(specific_variant, region, width_mode)
 
 
-def hint_eng_fonts(eng_variant: str):
+def hint_eng_fonts(eng_variant: str, width_mode: str = "12"):
     """Apply ttfautohint to alphanumeric-side fonts (region-independent)"""
     file_pattern = f"{FONTFORGE_PREFIX}{FONT_NAME}{eng_variant}*-eng.ttf"
     filenames = sorted(glob.glob(f"{BUILD_FONTS_DIR}/{file_pattern}"))
@@ -62,12 +65,11 @@ def hint_eng_fonts(eng_variant: str):
         if path.stem.endswith("-eng-hinted"):
             continue
         style = path.stem.split("-")[1]
-        variant = path.stem.split("-")[0].replace(f"{FONTFORGE_PREFIX}{FONT_NAME}", "")
         print(f"hint {filename}")
-        add_hinting(filename, filename.replace(".ttf", "-hinted.ttf"), variant, style)
+        add_hinting(filename, filename.replace(".ttf", "-hinted.ttf"), width_mode, style)
 
 
-def edit_fonts(specific_variant: str, region: str = None):
+def edit_fonts(specific_variant: str, region: str = None, width_mode: str = "12"):
     """フォントを編集する"""
 
     if specific_variant is None:
@@ -88,7 +90,7 @@ def edit_fonts(specific_variant: str, region: str = None):
         # The alphanumeric-side filename has no region, so strip the region from the modifier
         eng_variant = variant.replace(region, "", 1) if region else variant
         merge_fonts(style, variant, eng_variant)
-        fix_font_tables(style, variant)
+        fix_font_tables(style, variant, width_mode)
         if region:
             htag = plemocjk_config.hyphenate_tag(variant)
             plemocjk_metadata.apply(
@@ -96,6 +98,7 @@ def edit_fonts(specific_variant: str, region: str = None):
                 region=region,
                 variant_tag=variant,
                 style=style,
+                width_mode=width_mode,
             )
 
     # Delete temporary files (keep alphanumeric-side files; other regions still need them)
@@ -110,10 +113,10 @@ def edit_fonts(specific_variant: str, region: str = None):
         os.remove(filename)
 
 
-def add_hinting(input_font_path, output_font_path, variant, style):
+def add_hinting(input_font_path, output_font_path, width_mode, style):
     """フォントにヒンティングを付ける"""
     if "Italic" not in style:
-        width_variant = "35" if plemocjk_config.width_mode_for_tag(variant) != "12" else "normal"
+        width_variant = "35" if width_mode != "12" else "normal"
         ctrl_file = [
             "-m",
             f"hinting_post_process/{width_variant}-{style}-ctrl.txt",
@@ -167,7 +170,7 @@ def merge_fonts(style, variant, eng_variant=None):
     )
 
 
-def fix_font_tables(style, variant):
+def fix_font_tables(style, variant, width_mode):
     """フォントテーブルを編集する"""
 
     input_font_name = f"{FONTTOOLS_PREFIX}{FONT_NAME}{variant}-{style}_merged.ttf"
@@ -177,8 +180,8 @@ def fix_font_tables(style, variant):
 
     # OS/2, post テーブルのみのttxファイルを出力
     xml = dump_ttx(input_font_name, output_name_base)
-    # OS/2 テーブルを編集
-    wmode = plemocjk_config.width_mode_for_tag(variant)
+    # OS/2 テーブルを編集 (width_mode is passed in, not parsed from the name)
+    wmode = width_mode
     fix_os2_table(xml, style, flag_35=wmode == "35", flag_36=wmode == "36")
     # post テーブルを編集
     fix_post_table(xml, flag_wide=wmode == "35")

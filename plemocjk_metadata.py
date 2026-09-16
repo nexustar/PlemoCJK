@@ -165,10 +165,17 @@ def add_hdmx(font: TTFont, config: plemocjk_config.Config, half_width: int) -> N
     font["head"].flags |= HEAD_FLAG_INSTRUCTIONS_DEPEND_ON_PPEM
 
 
-def apply(path: str, region: str, variant_tag: str, style: str) -> None:
+def apply(
+    path: str, region: str, variant_tag: str, style: str, width_mode: str = None
+) -> None:
     config = plemocjk_config.load()
     base_family = config.family_from_tag(variant_tag, region)
-    wmode = plemocjk_config.width_mode_for_tag(variant_tag)
+    # width_mode is passed in by the build; fall back to the tag only for the CLI.
+    wmode = (
+        width_mode
+        if width_mode is not None
+        else plemocjk_config.width_mode_for_tag(variant_tag)
+    )
 
     font = TTFont(path, recalcBBoxes=False, recalcTimestamp=False)
     set_name_table(font, config, region, base_family, style)
@@ -187,10 +194,11 @@ def apply(path: str, region: str, variant_tag: str, style: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
+    if len(sys.argv) not in (5, 6):
         print(
-            f"Usage: {sys.argv[0]} <font.ttf> <region> <variant_tag> <style>",
+            f"Usage: {sys.argv[0]} <font.ttf> <region> <variant_tag> <style> [width_mode]",
             file=sys.stderr,
         )
         raise SystemExit(2)
-    apply(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    cli_width_mode = sys.argv[5] if len(sys.argv) > 5 else None
+    apply(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], cli_width_mode)

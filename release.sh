@@ -72,15 +72,15 @@ font_name = config.font_name
 
 regions = os.environ.get("REGIONS", "").split() or list(config.regions)
 variants = os.environ.get("VARIANTS", "").split() or list(
-    plemocjk_config.VARIANT_TABLE
+    plemocjk_config.VARIANTS
 )
 
 
 rows = []
 for variant in variants:
-    if variant not in plemocjk_config.VARIANT_TABLE:
+    if variant not in plemocjk_config.VARIANTS:
         continue
-    bare = plemocjk_config.VARIANT_TABLE[variant][1].replace("{R}", "")
+    bare = plemocjk_config.VARIANTS[variant].label
     for region in regions:
         tag = config.variant_tag(variant, region)
         htag = plemocjk_config.hyphenate_tag(tag)

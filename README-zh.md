@@ -18,10 +18,15 @@ IBM Plex Sans 合成。
 
 两个变体：
 
-| 变体 | 半角 / 全角（px） | 箭头、符号 | 全角空格 | Nerd Fonts |
-|---|:---:|:---:|:---:|:---:|
-| **default** | 540 / 1080 | 全角 | 隐藏 | - |
-| **Term** | 600 / 1200 | 半角 | 可视化 | 半角 |
+| 变体 | 半角 / 全角（px） | 符号¹ | 箭头 / 记号² | 全角空格 | Nerd Fonts |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **default** | 540 / 1080 | 半角 | 全角 | 空白 | - |
+| **Term** | 600 / 1200 | 半角 | 半角 | 可视化 | 半角 |
+
+¹ 拉丁-1 符号（§ ° ± × ÷）、数学运算符（∑ ∫ ≠ √ ∞）、希腊 / 西里尔（α Ω、А я）、
+引号（“ ” ‘ ’）为半角。
+² 箭头（← → ⇒）、几何图形（■ ● ★）、圈号 / 罗马数字（① Ⅰ）和 CJK 标点（… ※ №）
+在 `default` 里保持全角；`Term` 把所有歧义宽度字形都做成半角以适配终端网格。
 
 ## 构建
 
@@ -46,5 +51,5 @@ python3 check_fonts.py --variant default --ttc build/ttc/PlemoCJK-Regular.ttc
 ./release.sh
 ```
 
-`make.sh` 的环境变量：`REGIONS="SC KR"`、`VARIANTS="Console"`、
+`make.sh` 的环境变量：`REGIONS="SC KR"`、`VARIANTS="Term"`、
 `SKIP_PREPARE=1`、`DEBUG=1`、`MAX_PARALLEL=4`。

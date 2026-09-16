@@ -244,6 +244,9 @@ def generate_font(jp_style, eng_style, merged_style):
     if "Italic" in merged_style:
         transform_italic_glyphs(jp_font)
 
+    # Make alphabetic scripts (Greek/Cyrillic/IPA) half-width before normalizing
+    adjust_letter_script_width(jp_font)
+
     # 半角幅か全角幅になるように変換する
     set_width_600_or_1000(jp_font)
 
@@ -435,19 +438,9 @@ def adjust_some_glyph(jp_font, eng_font, style="Regular"):
     for glyph in jp_font.selection.select(("unicode", None), 0xFF0C).byGlyphs:
         glyph.transform(psMat.scale(1.40, 1.40))
         glyph.width = full_width
-    # LEFT SINGLE QUOTATION MARK (U+2018) ～ DOUBLE LOW-9 QUOTATION MARK (U+201E) の幅を全角幅にする
-    for glyph in jp_font.selection.select(
-        ("unicode", "ranges"), 0x2018, 0x2019
-    ).byGlyphs:
-        glyph.transform(psMat.scale(1.25, 1.25))
-        glyph.transform(psMat.translate((full_width - glyph.width) / 2, -150))
-        glyph.width = full_width
-    for glyph in jp_font.selection.select(
-        ("unicode", "ranges"), 0x201C, 0x201D
-    ).byGlyphs:
-        glyph.transform(psMat.scale(1.25, 1.25))
-        glyph.transform(psMat.translate((full_width - glyph.width) / 2, -150))
-        glyph.width = full_width
+    # PlemoCJK: quotes U+2018/2019/201C/201D are not forced full-width here.
+    # They come half-width from IBM Plex Mono for every region (they are no
+    # longer in delete_not_console_glyphs).
 
     # Cent Sign, Pound Sign, Yen Sign は半角記号に IBM Plex Sans JP を使用するため半角にする
     jp_font.selection.select(("unicode", None), 0x00A2)
@@ -659,56 +652,43 @@ def materialize_altuni_glyphs(font, entity_glyph_unicode_list):
 
 
 def delete_not_console_glyphs(eng_font):
+    """Clear from the alphanumeric font only the symbols we want full-width from
+    the CJK side. Everything else stays half-width from IBM Plex Mono, because
+    delete_duplicate_glyphs lets the eng side win on shared codepoints.
+
+    PlemoCJK: the full-width list uses a narrow style. Operators and text-attached
+    marks (§ ° ± × ÷ ¶ © ® ™, primes, quotes) stay half-width, and only arrows and
+    CJK-style marks go full-width. This makes about 70 symbols half-width that
+    PlemolJP used to force full-width.
+
+    Notes:
+    - Cyrillic is left out on purpose, so it stays half-width from IBM Plex Mono
+      (JP has only about half the block; see adjust_letter_script_width).
+    - Quotes U+2018/2019/201C/201D are half-width for every region, so Chinese
+      does not need a separate full-width form here.
+    - ‰ № ℡ are CJK-style marks, so they stay full-width.
+    - Mathematical Operators (U+2200-22FF) are not listed: the ones IBM Plex Mono
+      covers (√ ∞ ∑ ∫ ≤ ≥ ≠ …) come half-width from it; the rest (⊕ ⊗ ∈ ∮ ≪ …)
+      stay full-width from the JP side, like upstream -- squeezing them to half
+      would thin their strokes and distort circles.
+    """
+    full_width_syms = [
+        # em/CJK dashes and leaders
+        0x2014, 0x2015, 0x2025, 0x2026,
+        # CJK-flavoured marks
+        0x2030, 0x203B, 0x203E, 0x2116, 0x2121,
+        # arrows
+        0x2190, 0x2191, 0x2192, 0x2193,
+        0x21C4, 0x21C5, 0x21C6, 0x21D2, 0x21D4,
+        0x21E6, 0x21E7, 0x21E8, 0x21E9, 0x21F5,
+    ]
     eng_font.selection.none()
-
-    # 記号
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x00A1, 0x00A5)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x00A7, 0x00AA)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x00AC, 0x00B8)
-    eng_font.selection.select(("more", "unicode"), 0x00D7)
-    eng_font.selection.select(("more", "unicode"), 0x00F7)
-    eng_font.selection.select(("more", "unicode"), 0x0401)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x0410, 0x044F)
-    eng_font.selection.select(("more", "unicode"), 0x0451)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2010, 0x2026)
-    eng_font.selection.select(("more", "unicode"), 0x2030)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2032, 0x2033)
-    eng_font.selection.select(("more", "unicode"), 0x203B)
-    eng_font.selection.select(("more", "unicode"), 0x203E)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2113, 0x2122)
-    # 矢印
-    # TODO: IBM Plex Sans JP v1.002 へバージョンアップすると矢印が拡張される見込みだが、当該バージョンには一部グリフ欠けがあるためさらに上のバージョンが出てきた際に取り込む
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2190, 0x2193)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x21C4, 0x21C6)
-    eng_font.selection.select(("more", "unicode"), 0x21D2)
-    eng_font.selection.select(("more", "unicode"), 0x21D4)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x21E6, 0x21E9)
-    eng_font.selection.select(("more", "unicode"), 0x21F5)
-
-    # 数学記号
-    eng_font.selection.select(("more", "unicode"), 0x2200)
-    eng_font.selection.select(("more", "unicode"), 0x2202)
-    eng_font.selection.select(("more", "unicode"), 0x2211)
-    eng_font.selection.select(("more", "unicode"), 0x2219)
-    eng_font.selection.select(("more", "unicode"), 0x221A)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x221D, 0x2220)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2227, 0x222E)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2234, 0x2235)
-    eng_font.selection.select(("more", "unicode"), 0x2252)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2260, 0x2261)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2266, 0x2267)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x226A, 0x226B)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2282, 0x2283)
-    eng_font.selection.select(("more", "unicode", "ranges"), 0x2286, 0x2287)
-
-    # 一部 IBMPlexMono ベースにする
-    # 各エディタの可視化文字対策
-    eng_font.selection.select(("less", "unicode"), 0x2022)
-    eng_font.selection.select(("less", "unicode"), 0x00B7)
-    eng_font.selection.select(("less", "unicode"), 0x2024)
-    eng_font.selection.select(("less", "unicode"), 0x2219)
-    eng_font.selection.select(("less", "unicode"), 0x25D8)
-    eng_font.selection.select(("less", "unicode"), 0x25E6)
+    for cp in full_width_syms:
+        try:
+            eng_font.selection.select(("more", "unicode"), cp)
+        except ValueError:
+            # eng font lacks this codepoint; the JP glyph already survives.
+            continue
 
     for glyph in eng_font.selection.byGlyphs:
         glyph.clear()
@@ -736,6 +716,58 @@ def transform_italic_glyphs(font):
         glyph.transform(psMat.skew(ITALIC_ANGLE * math.pi / 180))
         glyph.transform(psMat.translate(-40, 0))
         glyph.width = orig_width
+
+
+def adjust_letter_script_width(jp_font):
+    """Make alphabetic scripts that fall to the CJK side half-width (1 cell) in
+    every variant, so a word reads uniformly instead of being split into
+    half- and full-width letters.
+
+    Covers Greek + Greek Extended, Cyrillic and IPA. Keyed on the Unicode block
+    rather than East Asian Width on purpose: within these scripts EAW is mixed
+    (accented Greek ί/ά and the extended Cyrillic letters are Neutral while the
+    base letters are Ambiguous), so keying on EAW=A would split a script.
+
+    Only JP-sourced glyphs are affected here (Greek/IPA come entirely from JP).
+    Cyrillic is served half-width from IBM Plex Mono instead -- see
+    delete_not_console_glyphs, which no longer removes it from the eng side --
+    because JP does not cover ~100 of the extended Cyrillic letters; this loop
+    is a no-op for it but keeps the range documented and catches any JP-only
+    Cyrillic. Runs before set_width_600_or_1000, emitting 500 which becomes the
+    600 half-width intermediate.
+    """
+    half_cell = 500      # pipeline half-width intermediate (-> 540 / 600 final)
+    # Max ink allowed in the cell. Kept below half_cell so a side bearing always
+    # survives to the final cell (~30u in the 540 default half-cell, ~60u in the
+    # 600 console one) -- so a trimmed glyph never ends flush against the edge
+    # (post-trim collisions). Also keeps mid-width letters near IBM Plex Mono's
+    # own ~0.93 horizontal scale rather than thinning them further.
+    ink_budget = 480
+    for glyph in jp_font.glyphs():
+        cp = glyph.unicode
+        # width<=0 skips combining marks (kept zero-width, never boxed)
+        if cp < 0 or glyph.width <= 0:
+            continue
+        if not (
+            0x0250 <= cp <= 0x02AF          # IPA Extensions
+            or 0x0370 <= cp <= 0x03FF       # Greek and Coptic
+            or 0x0400 <= cp <= 0x04FF       # Cyrillic
+            or 0x1F00 <= cp <= 0x1FFF       # Greek Extended
+        ):
+            continue
+        # Fit by real INK (bounding box), not the advance: scale down ONLY when
+        # the ink itself overflows the budget, so glyphs whose ink already fits
+        # are re-centered (bearings trimmed) rather than thinned. boundingBox
+        # captures any designed overhang / negative side-bearing, so a glyph that
+        # legitimately sits flush is measured and repositioned correctly.
+        bb = glyph.boundingBox()
+        ink = bb[2] - bb[0]
+        if ink > ink_budget:
+            glyph.transform(psMat.scale(ink_budget / ink, 1))
+            bb = glyph.boundingBox()
+        # Center the ink -> symmetric, always-positive bearings.
+        glyph.transform(psMat.translate((half_cell - (bb[0] + bb[2])) / 2, 0))
+        glyph.width = half_cell
 
 
 def set_width_600_or_1000(jp_font):
@@ -766,6 +798,18 @@ def set_width_600_or_1000(jp_font):
         ):  # 特定のアルファベット関連文字 0xC0 - 0x192 は全角幅にする
             # グリフ位置を調整してから幅を設定
             glyph.transform(psMat.translate((1000 - glyph.width) / 2, 0))
+            glyph.width = 1000
+        elif glyph.width > 1000:
+            # Advance exceeds a full cell (wide Cyrillic Ж Ш Щ Ю, ‰, ≪ ≫).
+            # Snap to full width; compress only when the ink itself overflows
+            # the cell (e.g. ‰), otherwise keep the shape and just re-center
+            # the ink -- most of these are merely padded, not over-wide.
+            bb = glyph.boundingBox()
+            ink = bb[2] - bb[0]
+            if ink > 1000:
+                glyph.transform(psMat.scale(1000 / ink, 1))
+                bb = glyph.boundingBox()
+            glyph.transform(psMat.translate((1000 - (bb[0] + bb[2])) / 2, 0))
             glyph.width = 1000
 
         # 500幅の場合は一旦 600 幅にする
