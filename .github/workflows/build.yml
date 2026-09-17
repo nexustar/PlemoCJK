@@ -77,7 +77,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Build per-region CJK input fonts once and share them.
-  # Avoids 4 regions x 2 variants = 8 jobs redundantly rebuilding the same thing.
+  # Avoids 4 regions x 3 variants = 12 jobs redundantly rebuilding the same thing.
   # ---------------------------------------------------------------------------
   prepare:
     needs: regen-sc-text

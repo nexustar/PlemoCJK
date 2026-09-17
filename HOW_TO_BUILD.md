@@ -108,7 +108,7 @@ docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builde
 |---|---|
 | `DEBUG=1` | Regular weight only. If `VARIANTS`/`REGIONS` are not set, builds Term x first region |
 | `REGIONS="SC KR"` | Limit regions (default: `[regions] REGIONS` in build.ini) |
-| `VARIANTS="Console ConsoleNF"` | Specify variants directly |
+| `VARIANTS="Term Natural"` | Specify variants directly |
 | `STYLES="Text TextItalic"` | Specify styles (weights) directly. Overrides `DEBUG` and also limits `prepare_cjk.py` |
 | `SKIP_PREPARE=1` | Skip `prepare_cjk.py` when `source/prepared/` already exists |
 | `MAX_PARALLEL=4` | Parallelism for region x variant |

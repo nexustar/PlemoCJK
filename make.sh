@@ -2,9 +2,9 @@
 # PlemoCJK: Build per-region subfonts (SC / TC / JP / KR)
 #
 # Environment variables:
-#   DEBUG=1          Build Console Regular for one region only (default: first in REGIONS)
+#   DEBUG=1          Build Term Regular for one region only (default: first in REGIONS)
 #   REGIONS="SC KR"  Limit regions to build (default: [regions] REGIONS in build.ini)
-#   VARIANTS="Console ConsoleNF"  Specify variants directly
+#   VARIANTS="Term Natural"  Specify variants directly
 #   STYLES="Text TextItalic"      Specify styles (weights) directly
 #   SKIP_PREPARE=1   Skip prepare_cjk.py (when source/prepared already exists)
 #   MAX_PARALLEL=4   Parallelism level

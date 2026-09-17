@@ -107,8 +107,8 @@ function parseArgs(argv) {
 const VARIANT_TAGS = {
   default: "{R}",
   Term: "Term{R}",
+  Natural: "Natural{R}",
   // Planned (add here together with plemocjk_config.VARIANTS):
-  // Nature: "Nature{R}",
   // Wide: "Wide{R}",
 };
 

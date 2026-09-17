@@ -91,8 +91,8 @@ VARIANTS: dict[str, Variant] = {
     for v in [
         Variant("default", label="", hidden_zenkaku_space=True),
         Variant("Term", width_mode="36", console=True, nerd_font=True),
+        Variant("Natural", width_mode="35", hidden_zenkaku_space=True),
         # Planned (verified to build; enable when shipping):
-        # Variant("Nature", width_mode="35", hidden_zenkaku_space=True),
         # Variant("Wide", width_mode="36", hidden_zenkaku_space=True),
     ]
 }
@@ -140,7 +140,7 @@ def width_mode_for_tag(tag: str) -> str:
     """Return '12' | '35' | '36' for a file tag (label + optional region).
 
     Matches the tag against the registry's own tags, so it stays correct for
-    editorial labels like 'Nature'/'Wide' that carry no width marker. Prefer
+    editorial labels like 'Natural'/'Wide' that carry no width marker. Prefer
     width_mode_for_variant in the build path; this is only for tools that have
     just an output filename to work from.
     """

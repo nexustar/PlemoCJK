@@ -9,18 +9,22 @@ Simplified Chinese / Traditional Chinese / Japanese / Korean.
 Four regional subfonts (SC / TC / JP / KR), each pairing IBM Plex Mono with
 that region's IBM Plex Sans.
 
-Two variants:
+Three variants:
 
 | Variant | Half / full (px) | Symbols¹ | Arrows / marks² | Full-width space | Nerd Fonts |
 |---|:---:|:---:|:---:|:---:|:---:|
 | **default** | 528 / 1056 | half | full | blank | - |
 | **Term** | 600 / 1200 | half | half | visible | half |
+| **Natural** | 600 / 1000 | half | full | blank | - |
 
 ¹ Latin-1 symbols (§ ° ± × ÷), math operators (∑ ∫ ≠ √ ∞), Greek / Cyrillic
 (α Ω, А я) and quotes (“ ” ‘ ’) are half-width.
 ² Arrows (← → ⇒), geometry (■ ● ★), circled / Roman numbers (① Ⅰ) and CJK
-punctuation (… ※ №) stay full-width in `default`; `Term` makes every ambiguous
+punctuation (… ※ №) stay full-width in `default` and `Natural`; `Term` makes every ambiguous
 glyph half-width for terminal grids.
+
+Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
+`PlemoCJK Natural SC`, with file `PlemoCJK-Natural-SC-Regular.ttf`.
 
 ## Building
 
