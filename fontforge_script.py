@@ -431,13 +431,6 @@ def adjust_some_glyph(jp_font, eng_font, style="Regular"):
         glyph = jp_font[glyph_name]
         glyph.transform(psMat.translate(180, 0))
         glyph.width = full_width
-    # 全角ピリオド、カンマを拡大する
-    for glyph in jp_font.selection.select(("unicode", None), 0xFF0E).byGlyphs:
-        glyph.transform(psMat.scale(1.45, 1.45))
-        glyph.width = full_width
-    for glyph in jp_font.selection.select(("unicode", None), 0xFF0C).byGlyphs:
-        glyph.transform(psMat.scale(1.40, 1.40))
-        glyph.width = full_width
     # PlemoCJK: quotes U+2018/2019/201C/201D are not forced full-width here.
     # They come half-width from IBM Plex Mono for every region (they are no
     # longer in delete_not_console_glyphs).
