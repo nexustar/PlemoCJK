@@ -1,16 +1,21 @@
 name: Build PlemoCJK
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
   workflow_dispatch:
     inputs:
       debug:
         description: "Regular weight only (fast smoke build)"
         type: boolean
         default: false
+
+# A new manual run supersedes an older run of the same branch and build mode.
+# Tag builds may publish releases, so allow them to finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.debug }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
 
 env:
   BUILDER_IMAGE: ghcr.io/yuru7/composite-font-builder
@@ -45,7 +50,7 @@ jobs:
             source/regenerated
           key: >-
             sc-text-450-${{ hashFiles('sources.lock') }}-${{
-            hashFiles('regen_sc_text.py') }}
+            hashFiles('regen_sc_text.py', 'plemocjk_config.py', 'build.ini') }}
 
       # The released SC is needed as a reference for cmap / name alignment and --check,
       # so fetch it even on a cache hit (uses a different key from the prepare cache)
@@ -55,8 +60,12 @@ jobs:
           path: source/IBM-Plex-Sans-SC
           key: plex-sources-sc-${{ hashFiles('sources.lock') }}
 
+      - name: Install verification dependencies
+        run: pip install "fonttools==4.63.0"
+
       - name: Install fontmake
-        run: pip install "fontmake[pathops]"
+        if: steps.regen-cache.outputs.cache-hit != 'true'
+        run: pip install "fontmake[pathops]" "fonttools==4.63.0"
 
       - name: Fetch IBM Plex Sans SC release
         run: python3 fetch_sources.py --regions SC
@@ -72,6 +81,7 @@ jobs:
         with:
           name: regenerated-sc-text
           path: source/regenerated/*.ttf
+          if-no-files-found: error
           retention-days: 1
           compression-level: 1
 
@@ -147,6 +157,7 @@ jobs:
         with:
           name: prepared-cjk
           path: source/prepared/*.ttf
+          if-no-files-found: error
           retention-days: 1
           compression-level: 1
 
@@ -187,17 +198,18 @@ jobs:
         with:
           name: ttf-${{ matrix.variant }}-${{ matrix.region }}
           path: build/*.ttf
+          if-no-files-found: error
           retention-days: 7
           compression-level: 1
 
-  # ---------------------------------------------------------------------------
-  # Bundle into TTC and verify after all regions are built.
-  # ---------------------------------------------------------------------------
+  # Bundle each variant on a separate runner to keep memory-heavy work isolated.
   bundle:
     needs: [prepare, build]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
     steps:
       - uses: actions/checkout@v5
 
@@ -208,43 +220,83 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - run: pip install "fonttools==4.63.0" brotli
+      - run: pip install "fonttools==4.63.0"
 
-      - name: Collect all region TTFs
+      - name: Collect variant TTFs
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ttf-${{ matrix.variant }}-*
+          path: build
+          merge-multiple: true
+
+      - run: python3 check_generated_fonts.py build/*.ttf
+
+      - name: Install otb-ttc-bundle
+        run: npm ci
+
+      - name: Bundle TTC
+        env:
+          VARIANT: ${{ matrix.variant }}
+          DEBUG_BUILD: ${{ inputs.debug }}
+        run: |
+          args=(--variant "$VARIANT")
+          if [ "$DEBUG_BUILD" = "true" ]; then
+            args+=(--style Regular)
+          fi
+          node --max-old-space-size=8192 bundle_ttc.mjs "${args[@]}"
+
+      - name: Check fonts and TTC
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          status=0
+          python3 check_fonts.py --variant "$VARIANT" || status=1
+          for ttc in build/ttc/*.ttc; do
+            python3 check_fonts.py --ttc "$ttc" || status=1
+          done
+          exit "$status"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ttc-${{ matrix.variant }}
+          path: build/ttc/*.ttc
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 1
+
+  # Collect verified TTFs and TTCs only after every variant succeeds.
+  package:
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install webfont dependencies
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: pip install "fonttools==4.63.0" brotli
+
+      - name: Collect all TTFs
         uses: actions/download-artifact@v5
         with:
           pattern: ttf-*
           path: build
           merge-multiple: true
 
-      - run: ls -la build && python3 check_generated_fonts.py build/*.ttf
-
-      - name: Install otb-ttc-bundle
-        run: npm ci || npm install
-
-      - name: Bundle TTC
-        env:
-          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
-        run: |
-          # ot-builder uses several GB for 4 x 50k glyphs, so increase the heap
-          for variant in $VARIANTS; do
-            node --max-old-space-size=8192 bundle_ttc.mjs --variant "$variant"
-          done
-          ls -la build/ttc
-
-      - name: Check fonts and TTC
-        env:
-          VARIANTS: ${{ join(fromJson(needs.prepare.outputs.variants), ' ') }}
-        run: |
-          status=0
-          for variant in $VARIANTS; do
-            python3 check_fonts.py --variant "$variant" || status=1
-          done
-          for ttc in build/ttc/*.ttc; do
-            python3 check_fonts.py --ttc "$ttc" || status=1
-          done
-          exit $status
+      - name: Collect all TTCs
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ttc-*
+          path: build/ttc
+          merge-multiple: true
 
       # release.sh requires zip / unzip. They are not included in the
       # composite-font-builder image used for font generation, so packaging
@@ -276,6 +328,7 @@ jobs:
         with:
           name: PlemoCJK-release
           path: build/release/*.zip
+          if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
