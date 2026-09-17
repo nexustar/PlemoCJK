@@ -729,9 +729,9 @@ def adjust_letter_script_width(jp_font):
     Cyrillic. Runs before set_width_600_or_1000, emitting 500 which becomes the
     600 half-width intermediate.
     """
-    half_cell = 500      # pipeline half-width intermediate (-> 540 / 600 final)
+    half_cell = 500      # pipeline half-width intermediate (-> 528 / 600 final)
     # Max ink allowed in the cell. Kept below half_cell so a side bearing always
-    # survives to the final cell (~30u in the 540 default half-cell, ~60u in the
+    # survives to the final cell (~24u in the 528 default half-cell, ~60u in the
     # 600 console one) -- so a trimmed glyph never ends flush against the edge
     # (post-trim collisions). Also keeps mid-width letters near IBM Plex Mono's
     # own ~0.93 horizontal scale rather than thinning them further.
@@ -865,11 +865,8 @@ def transform_half_width(jp_font, eng_font):
     """1:2幅になるように変換する"""
     before_width_eng = eng_font[0x0030].width
     after_width_eng = HALF_WIDTH_12
-    # 単純な 縮小後幅 / 元の幅 だと狭くなりすぎるので、分子は大きめにする。
-    # Keep the original 546-for-528 anti-condense margin proportional to
-    # HALF_WIDTH_12 (540 -> ~558), so widening the advance also widens the ink
-    # instead of only adding side-bearing.
-    x_scale = after_width_eng * (546 / 528) / before_width_eng
+    # 単純な 縮小後幅 / 元の幅 だと狭くなりすぎるので、分子は大きめにする (546 > 528)。
+    x_scale = 546 / before_width_eng
     for glyph in eng_font.glyphs():
         if glyph.width > 0:
             # リガチャ考慮

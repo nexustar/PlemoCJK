@@ -13,7 +13,7 @@ Two variants:
 
 | Variant | Half / full (px) | Symbols¹ | Arrows / marks² | Full-width space | Nerd Fonts |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **default** | 540 / 1080 | half | full | blank | - |
+| **default** | 528 / 1056 | half | full | blank | - |
 | **Term** | 600 / 1200 | half | half | visible | half |
 
 ¹ Latin-1 symbols (§ ° ± × ÷), math operators (∑ ∫ ≠ √ ∞), Greek / Cyrillic
