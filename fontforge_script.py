@@ -267,9 +267,18 @@ def generate_font(jp_style, eng_style, merged_style):
     # GPOSテーブルを削除する
     remove_lookups(jp_font, remove_gsub=False, remove_gpos=True)
 
-    # 罫線を全角にする
+    # fit block elements to the line height (all variants)
+    fit_block_line_height(eng_font)
     if not options.get("console"):
+        # box drawing to full width
         make_box_drawing_full_width(eng_font, jp_font)
+        # block elements to full width
+        make_block_elements_full_width(eng_font, jp_font[0x3042].width)
+        # shades ░▒▓: Hack squares, doubled to fill the full cell
+        apply_shade_blocks(eng_font, merged_style, jp_font[0x3042].width, doubled=True)
+    else:
+        # console: half-width shades
+        apply_shade_blocks(eng_font, merged_style, eng_font[0x0030].width, doubled=False)
 
     # 全角スペースを可視化する
     if not options.get("hidden-zenkaku-space"):
@@ -918,6 +927,98 @@ def make_box_drawing_full_width(eng_font, jp_font):
         glyph.transform(psMat.translate((width_to - width_from) / 2, 0))
         glyph.width = width_to
     jp_font.selection.none()
+
+
+def fit_block_line_height(eng_font):
+    """Fit the solid Block Elements (U+2580-259F; ░▒▓ shades are done in
+    apply_shade_blocks) to exactly the typo/hhea line box so they fill one line
+    and tile down with no gap. Mono draws them ~1300 tall (its own line);
+    transform_half_width leaves ~1262. One linear y-map keyed on U+2588 keeps the
+    fractions (█ full, ▄/▀ halves, eighths). Both variants."""
+    fb = eng_font[0x2588].boundingBox()
+    ch = fb[3] - fb[1]
+    if ch <= 0:
+        return
+    ty0, ty1 = -TYPO_DESCENT, TYPO_ASCENT
+    sy = (ty1 - ty0) / ch
+    dy = ty0 - fb[1] * sy
+    eng_font.selection.select(("unicode", "ranges"), 0x2580, 0x259F)
+    for glyph in list(eng_font.selection.byGlyphs):
+        if glyph.width <= 0 or 0x2591 <= glyph.unicode <= 0x2593:
+            continue
+        glyph.transform(psMat.scale(1, sy))
+        glyph.transform(psMat.translate(0, dy))
+    eng_font.selection.none()
+
+
+def make_block_elements_full_width(eng_font, full_width):
+    """Widen the solid Block Elements (U+2580-259F) from half-cell to full-cell.
+    They are edge-anchored (█ fills, ▌ left, ▐ right, eighths, quadrants), so
+    each is scaled horizontally FROM THE ORIGIN -- no re-centering, or left/right
+    anchoring would break. The scale comes from U+2588, whose ink already spans
+    one cell, so every block lands exactly on the full cell with no overflow or
+    gap (scaling by the advance would leave ink ~3% over, as transform_half_width
+    widens ink past the advance). Vertical is fit_block_line_height's job, shades
+    ░▒▓ are apply_shade_blocks's, so both are skipped. Non-console only."""
+    cell = eng_font[0x2588].boundingBox()
+    cell = cell[2] - cell[0]  # current one-cell ink width
+    if cell <= 0:
+        return
+    sx = full_width / cell
+    eng_font.selection.select(("unicode", "ranges"), 0x2580, 0x259F)
+    for glyph in list(eng_font.selection.byGlyphs):
+        if glyph.width <= 0 or 0x2591 <= glyph.unicode <= 0x2593:
+            continue
+        glyph.transform(psMat.scale(sx, 1))
+        glyph.width = full_width
+    eng_font.selection.none()
+
+
+def apply_shade_blocks(eng_font, style, target_width, doubled):
+    """Replace the shade blocks ░▒▓ (U+2591-2593) with Hack's square
+    checkerboard (Mono's are round dots that stretch to ovals in a wider cell;
+    Hack is already a source). Each is stretched to fill U+2588's width and the
+    typo/hhea line box, so shades match the solids and tile seamlessly -- the
+    dots go non-square, but filling the cell matters more for a texture.
+    doubled=True (full cell) first tiles two copies side by side so the full
+    cell keeps the half cell's pattern density."""
+    tb = eng_font[0x2588].boundingBox()  # solid block = the horizontal reference
+    tx0, tx1 = tb[0], tb[2]
+    ty0, ty1 = -TYPO_DESCENT, TYPO_ASCENT  # exactly one line high
+    tw, th = tx1 - tx0, ty1 - ty0
+    if tw <= 0 or th <= 0:
+        return
+    hack_style = "Bold" if "Bold" in style else "Regular"
+    hack = fontforge.open(f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", hack_style))
+    hack.em = EM_ASCENT + EM_DESCENT
+    for cp in (0x2591, 0x2592, 0x2593):
+        try:
+            g = hack[cp]
+        except TypeError:
+            continue
+        adv = g.width
+        if adv <= 0:
+            continue
+        if doubled:
+            fg = g.foreground
+            shifted = fg.dup()
+            shifted.transform(psMat.translate(adv, 0))
+            g.foreground = fg + shifted
+        b = g.boundingBox()
+        bw, bh = b[2] - b[0], b[3] - b[1]
+        if bw <= 0 or bh <= 0:
+            continue
+        g.transform(psMat.scale(tw / bw, th / bh))
+        b = g.boundingBox()
+        g.transform(psMat.translate(tx0 - b[0], ty0 - b[1]))
+        g.width = target_width
+        hack.selection.select(("unicode", None), cp)
+        hack.copy()
+        eng_font.selection.select(("unicode", None), cp)
+        eng_font.paste()
+        eng_font[cp].width = target_width
+    hack.close()
+    eng_font.selection.none()
 
 
 def visualize_zenkaku_space(jp_font):
