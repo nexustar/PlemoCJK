@@ -313,7 +313,9 @@ jobs:
 
       - name: Generate webfont subsets
         if: startsWith(github.ref, 'refs/tags/v')
-        run: python3 subset_webfont.py
+        run: |
+          python3 -m unittest -v test_subset_webfont
+          python3 subset_webfont.py
 
       - name: Package webfont archive
         if: startsWith(github.ref, 'refs/tags/v')

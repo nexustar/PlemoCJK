@@ -124,3 +124,20 @@ docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builde
    (`fontforge_script.py --eng-only` + ttfautohint); reused by all 4 regions
 3. Build region x variant in parallel
    (`fontforge_script.py --region XX` → `fonttools_script.py <tag> <region>`)
+
+
+### Webfonts
+
+```bash
+pip install "fonttools==4.63.0" brotli
+python3 subset_webfont.py build
+```
+
+Converts all built default-variant weights and italics; each style must have
+SC/TC/JP/KR inputs. Regular-only builds also work. Output:
+`build/release/PlemoCJK_webfont_VERSION/SC/PlemoCJK-SC.css` (likewise TC/JP/KR).
+Use `font-family: "PlemoCJK SC", monospace` and select weight/style in CSS.
+
+Each regional CSS includes every generated style. Subsets retain full character
+coverage and Google's range priority. The Action tests and packages webfonts on
+`v`-prefixed tags.
