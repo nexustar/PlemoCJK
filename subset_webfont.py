@@ -53,7 +53,7 @@ BROWSER_UA = (
 
 
 def fetch_google_css(font_name: str) -> str:
-    url = f"https://fonts.googleapis.com/css2?family={font_name}&display=swap"
+    url = f"https://fonts.googleapis.com/css2?family={font_name}"
     req = urllib.request.Request(url, headers={"User-Agent": BROWSER_UA})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read().decode("utf-8")
@@ -211,7 +211,6 @@ def generate_css(
             f"  font-family: '{family_name}';\n"
             f"  font-style: {style};\n"
             f"  font-weight: {weight};\n"
-            f"  font-display: swap;\n"
             f"  src: url('{filename}') format('woff2');\n"
             f"  unicode-range: {urange};\n"
             f"}}"
