@@ -967,7 +967,8 @@
             "file": "SC/PlemoCJK-SC-Thin.239.woff2",
             "sha256": "06f3cf64eacadaadf56cea71f74f3d2754d3cf61c815f44fd45f05cf928adf53"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Thin.css"
       },
       {
         "source": "PlemoCJK-SC-ExtraLight.ttf",
@@ -1932,7 +1933,8 @@
             "file": "SC/PlemoCJK-SC-ExtraLight.239.woff2",
             "sha256": "8e77194a8a4301a82420a9dbb8f1c4f3336c7ed697623599b60e30f277d8ce26"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-ExtraLight.css"
       },
       {
         "source": "PlemoCJK-SC-Light.ttf",
@@ -2897,7 +2899,8 @@
             "file": "SC/PlemoCJK-SC-Light.239.woff2",
             "sha256": "22b652c9efcaec02c5b41624b2a6236cb33a25c9e0a8948c34b96aeac317d3be"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Light.css"
       },
       {
         "source": "PlemoCJK-SC-Regular.ttf",
@@ -3862,7 +3865,8 @@
             "file": "SC/PlemoCJK-SC-Regular.239.woff2",
             "sha256": "3e0e89c46f948cb11b96b3bc034130c636fffadbc2a5143cb0ef3cd7afa23342"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Regular.css"
       },
       {
         "source": "PlemoCJK-SC-Text.ttf",
@@ -4827,7 +4831,8 @@
             "file": "SC/PlemoCJK-SC-Text.239.woff2",
             "sha256": "9ae25ca0f9521df8da3410812048e2adf1e3c3c4437bf6d19f0ad2e11813edd2"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Text.css"
       },
       {
         "source": "PlemoCJK-SC-Medium.ttf",
@@ -5792,7 +5797,8 @@
             "file": "SC/PlemoCJK-SC-Medium.239.woff2",
             "sha256": "29512cc7d8bc4cef289475b9e038a8f48a7d7eaf543730c3aaf97c8d846f1dbb"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Medium.css"
       },
       {
         "source": "PlemoCJK-SC-SemiBold.ttf",
@@ -6757,7 +6763,8 @@
             "file": "SC/PlemoCJK-SC-SemiBold.239.woff2",
             "sha256": "0a63344d71c72ca4ff4d235fe4c3889182ab8b5137966d6d5662666a591fd9b7"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-SemiBold.css"
       },
       {
         "source": "PlemoCJK-SC-Bold.ttf",
@@ -7722,7 +7729,8 @@
             "file": "SC/PlemoCJK-SC-Bold.239.woff2",
             "sha256": "64660a4fc049e8e212a75662bfdd072ac9561e184dd20afee96730c5b9fbd0d4"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Bold.css"
       },
       {
         "source": "PlemoCJK-SC-ThinItalic.ttf",
@@ -8687,7 +8695,8 @@
             "file": "SC/PlemoCJK-SC-ThinItalic.239.woff2",
             "sha256": "5b6175a9816fdf48474b23988348e3414c176fb4e3272d12d0bc1aefa1d66225"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-ThinItalic.css"
       },
       {
         "source": "PlemoCJK-SC-ExtraLightItalic.ttf",
@@ -9652,7 +9661,8 @@
             "file": "SC/PlemoCJK-SC-ExtraLightItalic.239.woff2",
             "sha256": "106f6c6036e6c7095d654119ec05875f819cc029d9f82360b10f4cc4745f0176"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-ExtraLightItalic.css"
       },
       {
         "source": "PlemoCJK-SC-LightItalic.ttf",
@@ -10617,7 +10627,8 @@
             "file": "SC/PlemoCJK-SC-LightItalic.239.woff2",
             "sha256": "702597c883180ac93ab39b21b39cb818226951badea66464bb1177f067e7f58b"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-LightItalic.css"
       },
       {
         "source": "PlemoCJK-SC-Italic.ttf",
@@ -11582,7 +11593,8 @@
             "file": "SC/PlemoCJK-SC-Italic.239.woff2",
             "sha256": "419dc7cc494b002e2cb95c4e0a2cae816d7d547ac14fcc5b5328ed9c16dd90aa"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-Italic.css"
       },
       {
         "source": "PlemoCJK-SC-TextItalic.ttf",
@@ -12547,7 +12559,8 @@
             "file": "SC/PlemoCJK-SC-TextItalic.239.woff2",
             "sha256": "77348094bdd4bd1711b7e6b5e58adb4e7eaf1b5cacd3af1099cc2132b9a63034"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-TextItalic.css"
       },
       {
         "source": "PlemoCJK-SC-MediumItalic.ttf",
@@ -13512,7 +13525,8 @@
             "file": "SC/PlemoCJK-SC-MediumItalic.239.woff2",
             "sha256": "74706926e3db232e55e286d0589afc462ece73378ed8332c6c70333b0c04f34d"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-MediumItalic.css"
       },
       {
         "source": "PlemoCJK-SC-SemiBoldItalic.ttf",
@@ -14477,7 +14491,8 @@
             "file": "SC/PlemoCJK-SC-SemiBoldItalic.239.woff2",
             "sha256": "ec174b1c06c6578cfa210a58a075391e80220cc3bf32008b77f68f62cd716204"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-SemiBoldItalic.css"
       },
       {
         "source": "PlemoCJK-SC-BoldItalic.ttf",
@@ -15442,7 +15457,8 @@
             "file": "SC/PlemoCJK-SC-BoldItalic.239.woff2",
             "sha256": "0be0e6d44ab1b4ed558547471bc353f2f8970816cde0df19019c7e66f5b283ea"
           }
-        ]
+        ],
+        "css": "PlemoCJK-SC-BoldItalic.css"
       }
     ],
     "TC": [
@@ -16421,7 +16437,8 @@
             "file": "TC/PlemoCJK-TC-Thin.242.woff2",
             "sha256": "253cd16405ff22b18eeec22ba799523416c8c98ccee6b4bf3241568eaa23b4e5"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Thin.css"
       },
       {
         "source": "PlemoCJK-TC-ExtraLight.ttf",
@@ -17394,7 +17411,8 @@
             "file": "TC/PlemoCJK-TC-ExtraLight.241.woff2",
             "sha256": "d894135ca7ce5044fed59be74162ba2ac2ebc6e4173f1e04ea95a20a7336afb0"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-ExtraLight.css"
       },
       {
         "source": "PlemoCJK-TC-Light.ttf",
@@ -18367,7 +18385,8 @@
             "file": "TC/PlemoCJK-TC-Light.241.woff2",
             "sha256": "2f82792c4586039927b4f09a49dbe8e8095c66ed76758a753f0bfe1bfefbd9ea"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Light.css"
       },
       {
         "source": "PlemoCJK-TC-Regular.ttf",
@@ -19344,7 +19363,8 @@
             "file": "TC/PlemoCJK-TC-Regular.242.woff2",
             "sha256": "a9c4c617c6beffea718034635b6e4caf6726426664b0cdaf91e2b484d9c26060"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Regular.css"
       },
       {
         "source": "PlemoCJK-TC-Text.ttf",
@@ -20317,7 +20337,8 @@
             "file": "TC/PlemoCJK-TC-Text.241.woff2",
             "sha256": "fc0c9d2f6722099aa2ae50c84cecd357b8003ec0df3c85afc27b17bb815424bb"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Text.css"
       },
       {
         "source": "PlemoCJK-TC-Medium.ttf",
@@ -21290,7 +21311,8 @@
             "file": "TC/PlemoCJK-TC-Medium.241.woff2",
             "sha256": "941906ec1a0399dc8c8862f6e1b4e74149944fd854893a22adc15c25e2933e63"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Medium.css"
       },
       {
         "source": "PlemoCJK-TC-SemiBold.ttf",
@@ -22267,7 +22289,8 @@
             "file": "TC/PlemoCJK-TC-SemiBold.242.woff2",
             "sha256": "96792218a84544da8075af8e611595374c87e9d99fa1f9455d44d982d2dfbab8"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-SemiBold.css"
       },
       {
         "source": "PlemoCJK-TC-Bold.ttf",
@@ -23244,7 +23267,8 @@
             "file": "TC/PlemoCJK-TC-Bold.242.woff2",
             "sha256": "d6dd5228d54f62563d51fba74686803a9310a6eb7d5c0a33272a522b3b4180a7"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Bold.css"
       },
       {
         "source": "PlemoCJK-TC-ThinItalic.ttf",
@@ -24221,7 +24245,8 @@
             "file": "TC/PlemoCJK-TC-ThinItalic.242.woff2",
             "sha256": "5577f11548eef23babca7604bfbaa87c8f2ef25d9e6909341cdf023e8df8a008"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-ThinItalic.css"
       },
       {
         "source": "PlemoCJK-TC-ExtraLightItalic.ttf",
@@ -25194,7 +25219,8 @@
             "file": "TC/PlemoCJK-TC-ExtraLightItalic.241.woff2",
             "sha256": "640980e70201721ab90921cf9c4777788aea453d4d29bbfe33aaab0d2377e621"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-ExtraLightItalic.css"
       },
       {
         "source": "PlemoCJK-TC-LightItalic.ttf",
@@ -26167,7 +26193,8 @@
             "file": "TC/PlemoCJK-TC-LightItalic.241.woff2",
             "sha256": "7f385e652180794c88e9e572d622224591e373187c61c4a25753299e492180a4"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-LightItalic.css"
       },
       {
         "source": "PlemoCJK-TC-Italic.ttf",
@@ -27144,7 +27171,8 @@
             "file": "TC/PlemoCJK-TC-Italic.242.woff2",
             "sha256": "4627d0f43f0f70224648d92eeb9c44e66fff0b65650a24c9eebceec172697048"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-Italic.css"
       },
       {
         "source": "PlemoCJK-TC-TextItalic.ttf",
@@ -28117,7 +28145,8 @@
             "file": "TC/PlemoCJK-TC-TextItalic.241.woff2",
             "sha256": "94bbd155c3b630be44a27e90717a2fec9305aad6d34865da66a3cd6adfc54613"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-TextItalic.css"
       },
       {
         "source": "PlemoCJK-TC-MediumItalic.ttf",
@@ -29090,7 +29119,8 @@
             "file": "TC/PlemoCJK-TC-MediumItalic.241.woff2",
             "sha256": "e87f33827a32da99e940f37801c6fe534b9c38b18cde640e4517218b3c399a95"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-MediumItalic.css"
       },
       {
         "source": "PlemoCJK-TC-SemiBoldItalic.ttf",
@@ -30067,7 +30097,8 @@
             "file": "TC/PlemoCJK-TC-SemiBoldItalic.242.woff2",
             "sha256": "e9d3c01aaff11155bf34a84f107bca602d05fce6f14744aa66cc7915ee059d37"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-SemiBoldItalic.css"
       },
       {
         "source": "PlemoCJK-TC-BoldItalic.ttf",
@@ -31044,7 +31075,8 @@
             "file": "TC/PlemoCJK-TC-BoldItalic.242.woff2",
             "sha256": "676538aa14594959ab821482289d43a9568c7321355d694a2b2dac790693ca7f"
           }
-        ]
+        ],
+        "css": "PlemoCJK-TC-BoldItalic.css"
       }
     ],
     "JP": [
@@ -32079,7 +32111,8 @@
             "file": "JP/PlemoCJK-JP-Thin.256.woff2",
             "sha256": "e5381c86604b8f4bd7ce7ff9dbb522c59677289dc9a4ee0f08a98532d6c3c6f8"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Thin.css"
       },
       {
         "source": "PlemoCJK-JP-ExtraLight.ttf",
@@ -33112,7 +33145,8 @@
             "file": "JP/PlemoCJK-JP-ExtraLight.256.woff2",
             "sha256": "ad55450e7acb8373ab2da86db61134c12ad5ccd53c16933696113a83ed18b665"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-ExtraLight.css"
       },
       {
         "source": "PlemoCJK-JP-Light.ttf",
@@ -34145,7 +34179,8 @@
             "file": "JP/PlemoCJK-JP-Light.256.woff2",
             "sha256": "7daf01ba21e3b59903daea5d8a219a2bfcc2d3bc92a140f1264dfb6419e5ca64"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Light.css"
       },
       {
         "source": "PlemoCJK-JP-Regular.ttf",
@@ -35178,7 +35213,8 @@
             "file": "JP/PlemoCJK-JP-Regular.256.woff2",
             "sha256": "08b4a5b73fbb33fda35c9284d2e9754783ebb48c0f4060a6b35c3575abbf930a"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Regular.css"
       },
       {
         "source": "PlemoCJK-JP-Text.ttf",
@@ -36211,7 +36247,8 @@
             "file": "JP/PlemoCJK-JP-Text.256.woff2",
             "sha256": "0a69b19c4085f32ce3fce7a20d111fcb68778a5f2f857437138efa4829e85e65"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Text.css"
       },
       {
         "source": "PlemoCJK-JP-Medium.ttf",
@@ -37244,7 +37281,8 @@
             "file": "JP/PlemoCJK-JP-Medium.256.woff2",
             "sha256": "4e83f1038d59f9762d30ffdd453b4ee42cb7466e74cd5caca99e85e75491515c"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Medium.css"
       },
       {
         "source": "PlemoCJK-JP-SemiBold.ttf",
@@ -38277,7 +38315,8 @@
             "file": "JP/PlemoCJK-JP-SemiBold.256.woff2",
             "sha256": "f38bb4c05ce87408627dcd95a6b5cb10c8e81c273ec54485640eb1fd8bcb949f"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-SemiBold.css"
       },
       {
         "source": "PlemoCJK-JP-Bold.ttf",
@@ -39310,7 +39349,8 @@
             "file": "JP/PlemoCJK-JP-Bold.256.woff2",
             "sha256": "bd2c5ab7cbb300ff455e110c53aa6aeff8c9358187d6a20acb8219a156076af1"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Bold.css"
       },
       {
         "source": "PlemoCJK-JP-ThinItalic.ttf",
@@ -40343,7 +40383,8 @@
             "file": "JP/PlemoCJK-JP-ThinItalic.256.woff2",
             "sha256": "aa945512244ff987c62370eac0abd35115c0b57dffaf33820ce99e6034815c50"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-ThinItalic.css"
       },
       {
         "source": "PlemoCJK-JP-ExtraLightItalic.ttf",
@@ -41376,7 +41417,8 @@
             "file": "JP/PlemoCJK-JP-ExtraLightItalic.256.woff2",
             "sha256": "0cbd8d3f59807239e5f8c447306829a84a21b17be3aceeb7c3dcab00aabfe4e8"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-ExtraLightItalic.css"
       },
       {
         "source": "PlemoCJK-JP-LightItalic.ttf",
@@ -42409,7 +42451,8 @@
             "file": "JP/PlemoCJK-JP-LightItalic.256.woff2",
             "sha256": "43316508ab5a6004e76f648acfd2d94820bd643e3ea1354902687c116fd51ee0"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-LightItalic.css"
       },
       {
         "source": "PlemoCJK-JP-Italic.ttf",
@@ -43442,7 +43485,8 @@
             "file": "JP/PlemoCJK-JP-Italic.256.woff2",
             "sha256": "ab830ebecfe60aecdb77d46dcd776fb04e0fdf5111d74ffd5d5b3b3ca8ceaf97"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-Italic.css"
       },
       {
         "source": "PlemoCJK-JP-TextItalic.ttf",
@@ -44475,7 +44519,8 @@
             "file": "JP/PlemoCJK-JP-TextItalic.256.woff2",
             "sha256": "6f4e41b226aed971b289e505f472a4a87619ad1b60c43a8ef8db9ac2554fcbd2"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-TextItalic.css"
       },
       {
         "source": "PlemoCJK-JP-MediumItalic.ttf",
@@ -45508,7 +45553,8 @@
             "file": "JP/PlemoCJK-JP-MediumItalic.256.woff2",
             "sha256": "82e146123f62ff74820a17bb955838a1ef6359943a0ece9ac8de7b670af0c6f9"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-MediumItalic.css"
       },
       {
         "source": "PlemoCJK-JP-SemiBoldItalic.ttf",
@@ -46541,7 +46587,8 @@
             "file": "JP/PlemoCJK-JP-SemiBoldItalic.256.woff2",
             "sha256": "85be97cfa117a7528f5f47644c8321847a236f3de9e386002a4e124dddd10d35"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-SemiBoldItalic.css"
       },
       {
         "source": "PlemoCJK-JP-BoldItalic.ttf",
@@ -47574,7 +47621,8 @@
             "file": "JP/PlemoCJK-JP-BoldItalic.256.woff2",
             "sha256": "0a98925977c4a7c1421de0ddfef04e2ac1fe9b0d90e4a413deeef5fda850c914"
           }
-        ]
+        ],
+        "css": "PlemoCJK-JP-BoldItalic.css"
       }
     ],
     "KR": [
@@ -48589,7 +48637,8 @@
             "file": "KR/PlemoCJK-KR-Thin.251.woff2",
             "sha256": "08edc5b77262f2bb4d43cb38aef5770823814c31886d3152740617a5680e16f5"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Thin.css"
       },
       {
         "source": "PlemoCJK-KR-ExtraLight.ttf",
@@ -49602,7 +49651,8 @@
             "file": "KR/PlemoCJK-KR-ExtraLight.251.woff2",
             "sha256": "a19b81be0477ac2752456167ef7147bb583c96a7f72deb437b08ed5f1ccb11ae"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-ExtraLight.css"
       },
       {
         "source": "PlemoCJK-KR-Light.ttf",
@@ -50615,7 +50665,8 @@
             "file": "KR/PlemoCJK-KR-Light.251.woff2",
             "sha256": "b4fb4d99274c13ab390cc529e8616a7595673a3bab15ab921ac83b0f20354079"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Light.css"
       },
       {
         "source": "PlemoCJK-KR-Regular.ttf",
@@ -51628,7 +51679,8 @@
             "file": "KR/PlemoCJK-KR-Regular.251.woff2",
             "sha256": "df14904d8ac03ffa49c8996bc1d1afa9b81b32b387721d1fa58715bf4f1363f6"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Regular.css"
       },
       {
         "source": "PlemoCJK-KR-Text.ttf",
@@ -52641,7 +52693,8 @@
             "file": "KR/PlemoCJK-KR-Text.251.woff2",
             "sha256": "f61c8cc2cf51dcfdb808675bd87f69906310bbf2f3d43d74f27bb9f886571412"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Text.css"
       },
       {
         "source": "PlemoCJK-KR-Medium.ttf",
@@ -53654,7 +53707,8 @@
             "file": "KR/PlemoCJK-KR-Medium.251.woff2",
             "sha256": "f75eb6537f68675581b75fed83ecb015ecfd0b7c72a08d19bcd840a111315f93"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Medium.css"
       },
       {
         "source": "PlemoCJK-KR-SemiBold.ttf",
@@ -54667,7 +54721,8 @@
             "file": "KR/PlemoCJK-KR-SemiBold.251.woff2",
             "sha256": "7ac59c6d350b85d074902bb6217816ddcb22eee0647232dd29760fcce3385e99"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-SemiBold.css"
       },
       {
         "source": "PlemoCJK-KR-Bold.ttf",
@@ -55680,7 +55735,8 @@
             "file": "KR/PlemoCJK-KR-Bold.251.woff2",
             "sha256": "549e1358e173c75ebc41ac2ae3fcb3ea9438da6a48a42af0553301c723adbd04"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Bold.css"
       },
       {
         "source": "PlemoCJK-KR-ThinItalic.ttf",
@@ -56693,7 +56749,8 @@
             "file": "KR/PlemoCJK-KR-ThinItalic.251.woff2",
             "sha256": "4859680ab0c49127434e283fed1f77bcb373d7fde3dad6ea37d55f2668686424"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-ThinItalic.css"
       },
       {
         "source": "PlemoCJK-KR-ExtraLightItalic.ttf",
@@ -57706,7 +57763,8 @@
             "file": "KR/PlemoCJK-KR-ExtraLightItalic.251.woff2",
             "sha256": "102c86cfbac61caa8b91c92721b656adb306abcb03cafd034e6e0b1a51b050fc"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-ExtraLightItalic.css"
       },
       {
         "source": "PlemoCJK-KR-LightItalic.ttf",
@@ -58719,7 +58777,8 @@
             "file": "KR/PlemoCJK-KR-LightItalic.251.woff2",
             "sha256": "0b06bbb8f57e22183a6b8d8feb8aa59be844e8a196e3caa723f877cb70f5ef6c"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-LightItalic.css"
       },
       {
         "source": "PlemoCJK-KR-Italic.ttf",
@@ -59732,7 +59791,8 @@
             "file": "KR/PlemoCJK-KR-Italic.251.woff2",
             "sha256": "82a62b17e80345123f7c85d9945a2e6a4ec2a57bbc8f0b586aeb92f1b2d5aa15"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-Italic.css"
       },
       {
         "source": "PlemoCJK-KR-TextItalic.ttf",
@@ -60745,7 +60805,8 @@
             "file": "KR/PlemoCJK-KR-TextItalic.251.woff2",
             "sha256": "894a49e3644a365d131e709ef1da0f950560f7ebbbda901bbc1607fafadb73c3"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-TextItalic.css"
       },
       {
         "source": "PlemoCJK-KR-MediumItalic.ttf",
@@ -61758,7 +61819,8 @@
             "file": "KR/PlemoCJK-KR-MediumItalic.251.woff2",
             "sha256": "6a6dbba2a7e80b3d4731d74a5f691cd8099c86396bfbff85106a5e15e51b4104"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-MediumItalic.css"
       },
       {
         "source": "PlemoCJK-KR-SemiBoldItalic.ttf",
@@ -62771,7 +62833,8 @@
             "file": "KR/PlemoCJK-KR-SemiBoldItalic.251.woff2",
             "sha256": "5528eb41927acc8f0bd4e43f2e35ef46b457f8d1e11de5834ef16e1d55522988"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-SemiBoldItalic.css"
       },
       {
         "source": "PlemoCJK-KR-BoldItalic.ttf",
@@ -63784,7 +63847,8 @@
             "file": "KR/PlemoCJK-KR-BoldItalic.251.woff2",
             "sha256": "8ac9df94809f196e079b8a0bcd5a2e3e130e083539aaaef4669a07461d72fc6f"
           }
-        ]
+        ],
+        "css": "PlemoCJK-KR-BoldItalic.css"
       }
     ]
   }

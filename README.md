@@ -1,10 +1,12 @@
 # PlemoCJK webfonts v0.0.3
 
-Default variant for SC / TC / JP / KR. Each regional CSS covers every
-built weight and italic; browsers load only the slices a page uses.
+Default variant for SC / TC / JP / KR. `PlemoCJK-SC.css` holds Regular,
+Bold and their italics; `PlemoCJK-SC-Light.css` and the like hold one
+style each. Browsers load only the slices a page uses.
 
 ```html
 <link rel="stylesheet" href="PlemoCJK-SC.css">
+<link rel="stylesheet" href="PlemoCJK-SC-Light.css">
 <style>code, pre { font-family: 'PlemoCJK SC', monospace; }</style>
 ```
 
