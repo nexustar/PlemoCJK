@@ -7,15 +7,21 @@ Requires fonttools and brotli. Google ranges are cached in .webfont_cache/.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.request
+from concurrent.futures import Executor, ProcessPoolExecutor, as_completed, wait
 from configparser import ConfigParser
 from pathlib import Path
 
 from fontTools import subset
+from fontTools import version as fonttools_version
 from fontTools.ttLib import TTFont
 
 from plemocjk_config import ALL_STYLES
@@ -28,6 +34,14 @@ REGION_TO_GOOGLE_FONT = {
 }
 
 CACHE_DIR = Path(__file__).parent / ".webfont_cache"
+
+PRINTABLE_ASCII = set(range(0x20, 0x7F))
+
+# Source fonts of the default variant (no Nerd Fonts).
+LICENSES = {
+    "source/LICENSE_IBM-Plex": "LICENSE_IBM-Plex",
+    "source/hack/LICENSE": "LICENSE_Hack",
+}
 
 BROWSER_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -110,8 +124,8 @@ def plan_slices(points: set[int], ranges: list[str]) -> list[set[int]]:
 def subset_font(input_ttf: Path, output_woff2: Path, points: set[int]) -> None:
     options = subset.Options()
     options.layout_features = ["*"]
-    options.glyph_names = True
     options.hinting = False
+    options.drop_tables += ["meta"]
     options.desubroutinize = True
     with TTFont(input_ttf, recalcTimestamp=False) as font:
         subsetter = subset.Subsetter(options=options)
@@ -126,6 +140,16 @@ def subset_font(input_ttf: Path, output_woff2: Path, points: set[int]) -> None:
     with TTFont(output_woff2) as check:
         if set(check.getBestCmap() or {}) != points:
             raise RuntimeError(f"Subset coverage mismatch: {output_woff2}")
+
+
+def git_commit() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent,
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def read_ini() -> dict[str, str]:
@@ -187,21 +211,33 @@ def generate_css(
     return "\n\n".join(rules) + "\n"
 
 
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def process_region(
     region: str,
     input_ttfs: list[Path],
-    output_dir: Path,
+    webfont_dir: Path,
     font_name: str,
-):
+    pool: Executor | None = None,
+) -> list[dict]:
+    """Write WEBFONT_DIR/<font>-<region>.css and its slices in WEBFONT_DIR/<region>/.
+
+    Slices are converted on POOL when given. Returns manifest entries.
+    """
     ranges = load_slices(region)
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    webfont_dir.mkdir(parents=True, exist_ok=True)
+    font_dir = webfont_dir / region
     canonical = font_name.replace(" ", "")
     css_name = f"{canonical}-{region}.css"
     rules = []
     expected = set()
+    entries = []
+    jobs = []
 
     # Publish only after every style succeeds.
-    with tempfile.TemporaryDirectory(prefix=f".{region}-", dir=output_dir.parent) as tmp:
+    with tempfile.TemporaryDirectory(prefix=f".{region}-", dir=webfont_dir) as tmp:
         staging = Path(tmp)
         for input_ttf in input_ttfs:
             with TTFont(input_ttf) as font:
@@ -211,25 +247,93 @@ def process_region(
             if not points:
                 raise RuntimeError(f"No Unicode cmap: {input_ttf}")
             groups = plan_slices(points, ranges)
+            if sum(map(len, groups)) != len(points) or set().union(*groups) != points:
+                raise RuntimeError(f"Slices do not partition the cmap: {input_ttf}")
+            ascii_points = PRINTABLE_ASCII & points
+            if ascii_points and sum(bool(g & ascii_points) for g in groups) != 1:
+                raise RuntimeError(f"Printable ASCII split across slices: {input_ttf}")
             css_slices = []
+            names = []
             for idx, group in enumerate(groups, 1):
                 name = f"{input_ttf.stem}.{idx}.woff2"
-                subset_font(input_ttf, staging / name, group)
-                expected.add(name)
-                css_slices.append((idx, format_codepoints(group), name))
+                jobs.append((input_ttf, staging / name, group))
+                names.append(name)
+                css_slices.append((idx, format_codepoints(group), f"{region}/{name}"))
+            expected.update(names)
             rules.append(generate_css(f"{font_name} {region}", css_slices, weight, style))
-            print(f"  {input_ttf.name}: {len(groups)} slices, {len(points)} codepoints")
+            entries.append({
+                "source": input_ttf.name,
+                "source_sha256": sha256(input_ttf),
+                "weight": weight,
+                "style": style,
+                "codepoints": len(points),
+                "files": names,
+            })
+        run_jobs(jobs, pool)
+        for entry in entries:
+            entry["files"] = [
+                {"file": f"{region}/{name}", "sha256": sha256(staging / name)}
+                for name in entry["files"]
+            ]
+            print(f"  {entry['source']}: {len(entry['files'])} slices, {entry['codepoints']} codepoints")
         (staging / css_name).write_text("\n".join(rules), encoding="utf-8")
-        output_dir.mkdir(parents=True, exist_ok=True)
+        font_dir.mkdir(exist_ok=True)
         for path in staging.glob("*.woff2"):
-            path.replace(output_dir / path.name)
-        (staging / css_name).replace(output_dir / css_name)
+            path.replace(font_dir / path.name)
+        (staging / css_name).replace(webfont_dir / css_name)
+        # CSS used to live inside the region directory.
+        (font_dir / css_name).unlink(missing_ok=True)
         for old_style in ALL_STYLES:
             for stem in (f"{canonical}-{region}-{old_style}", f"{canonical}{region}-{old_style}"):
-                for path in output_dir.glob(f"{stem}.*.woff2"):
+                for path in font_dir.glob(f"{stem}.*.woff2"):
                     if path.name not in expected:
                         path.unlink()
-                (output_dir / f"{stem}.css").unlink(missing_ok=True)
+                (font_dir / f"{stem}.css").unlink(missing_ok=True)
+    return entries
+
+
+def run_jobs(jobs: list[tuple[Path, Path, set[int]]], pool: Executor | None) -> None:
+    if pool is None:
+        for job in jobs:
+            subset_font(*job)
+        return
+    futures = [pool.submit(subset_font, *job) for job in jobs]
+    try:
+        for future in as_completed(futures):
+            future.result()
+    except BaseException:
+        # Let running jobs finish before the staging directory is removed.
+        for future in futures:
+            future.cancel()
+        wait(futures)
+        raise
+
+
+def write_extras(webfont_dir: Path, font_name: str, version: str, manifest: dict) -> None:
+    """Add licenses, a usage README and a hash manifest for standalone publishing."""
+    root = Path(__file__).parent
+    shutil.copy2(root / "LICENSE", webfont_dir / "LICENSE")
+    licenses = webfont_dir / "licenses"
+    licenses.mkdir(exist_ok=True)
+    for src, name in LICENSES.items():
+        shutil.copy2(root / src, licenses / name)
+    (webfont_dir / ".nojekyll").touch()
+    family = f"{font_name} SC"
+    css = f"{font_name.replace(' ', '')}-SC.css"
+    (webfont_dir / "README.md").write_text(
+        f"# {font_name} webfonts {version}\n\n"
+        "Default variant for SC / TC / JP / KR. Each regional CSS covers every\n"
+        "built weight and italic; browsers load only the slices a page uses.\n\n"
+        "```html\n"
+        f'<link rel="stylesheet" href="{css}">\n'
+        f"<style>code, pre {{ font-family: '{family}', monospace; }}</style>\n"
+        "```\n\n"
+        "Replace SC with TC, JP or KR for regional glyph forms. `manifest.json`\n"
+        "lists source TTF and WOFF2 hashes. Fonts are licensed under the SIL Open\n"
+        "Font License 1.1; see `LICENSE` and `licenses/`.\n",
+        encoding="utf-8",
+    )
+    (webfont_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
 def main():
@@ -251,8 +355,16 @@ def main():
     print(f"Output: {webfont_dir}")
 
     inputs = find_inputs(build_dir, canonical)
-    for region, ttfs in inputs.items():
-        process_region(region, ttfs, webfont_dir / region, font_name)
+    manifest = {
+        "version": version,
+        "commit": os.environ.get("GITHUB_SHA") or git_commit(),
+        "fonttools": fonttools_version,
+        "regions": {},
+    }
+    with ProcessPoolExecutor(os.cpu_count()) as pool:
+        for region, ttfs in inputs.items():
+            manifest["regions"][region] = process_region(region, ttfs, webfont_dir, font_name, pool)
+    write_extras(webfont_dir, font_name, version, manifest)
 
     print(f"\n### Done: {webfont_dir} ###")
 

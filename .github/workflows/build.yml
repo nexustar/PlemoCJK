@@ -1,6 +1,8 @@
 name: Build PlemoCJK
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       debug:
@@ -337,5 +339,20 @@ jobs:
       - name: Create release and upload archives
         if: startsWith(github.ref, 'refs/tags/v')
         run: gh release create "${{ github.ref_name }}" build/release/*.zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Replace the webfonts branch with a single orphan commit (served by
+      # GitHub Pages; too large for jsDelivr). Older versions stay in releases.
+      - name: Publish webfonts branch
+        if: startsWith(github.ref, 'refs/tags/v') && !inputs.debug
+        run: |
+          cd build/release/PlemoCJK_webfont_*/
+          git init -q -b webfonts
+          git add -A
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Publish webfonts ${{ github.ref_name }} (${GITHUB_SHA::7})"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" webfonts
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,7 +1,9 @@
 """Regression checks for complete webfont coverage and CSS slice priority."""
+import json
 import re
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,7 +62,8 @@ class WebfontTests(unittest.TestCase):
             root = Path(tmp)
             ttf = root / "PlemoCJK-SC-Regular.ttf"
             self.make_font(ttf)
-            out = root / "webfonts" / "SC"
+            webfont_dir = root / "webfonts"
+            out = webfont_dir / "SC"
             out.mkdir(parents=True)
             stale = out / "PlemoCJK-SC-Regular.999.woff2"
             stale.write_bytes(b"obsolete")
@@ -70,10 +73,13 @@ class WebfontTests(unittest.TestCase):
             old_bold.write_bytes(b"old weight")
             unrelated = out / "other.woff2"
             unrelated.write_bytes(b"keep")
+            old_css = out / "PlemoCJK-SC.css"
+            old_css.write_text("CSS from the old layout")
             with patch.object(webfont, "load_slices", return_value=["U+41,U+4E00", "U+20-7F"]):
-                webfont.process_region("SC", [ttf], out, "PlemoCJK")
-            css = (out / "PlemoCJK-SC.css").read_text()
+                webfont.process_region("SC", [ttf], webfont_dir, "PlemoCJK")
+            css = (webfont_dir / "PlemoCJK-SC.css").read_text()
             self.assertIn("font-family: 'PlemoCJK SC'", css)
+            self.assertIn("url('SC/PlemoCJK-SC-Regular.1.woff2')", css)
             ranges = webfont.parse_unicode_ranges(css)
             self.assertEqual(len(ranges), 3)
             covered = set()
@@ -85,6 +91,7 @@ class WebfontTests(unittest.TestCase):
             self.assertEqual(covered, {32, 65, 0x4E00, 0x20000})
             self.assertFalse(stale.exists())
             self.assertFalse(legacy_css.exists())
+            self.assertFalse(old_css.exists())
             self.assertFalse(old_bold.exists())
             self.assertEqual(unrelated.read_bytes(), b"keep")
 
@@ -104,9 +111,20 @@ class WebfontTests(unittest.TestCase):
                  patch.object(webfont, "load_slices", return_value=["U+41,U+4E00", "U+20-7F"]):
                 webfont.main()
             version = webfont.read_ini()["version"]
+            webfont_dir = root / "release" / f"PlemoCJK_webfont_{version}"
+            for name in ["LICENSE", "licenses/LICENSE_IBM-Plex", "licenses/LICENSE_Hack",
+                         "README.md", ".nojekyll"]:
+                self.assertTrue((webfont_dir / name).exists(), name)
+            manifest = json.loads((webfont_dir / "manifest.json").read_text())
+            for region, fonts in manifest["regions"].items():
+                self.assertEqual(len(fonts), len(webfont.ALL_STYLES))
+                for entry in fonts:
+                    for item in entry["files"]:
+                        path = webfont_dir / item["file"]
+                        self.assertEqual(webfont.sha256(path), item["sha256"])
             for region in webfont.REGION_TO_GOOGLE_FONT:
-                out = root / "release" / f"PlemoCJK_webfont_{version}" / region
-                css = (out / f"PlemoCJK-{region}.css").read_text()
+                out = webfont_dir / region
+                css = (webfont_dir / f"PlemoCJK-{region}.css").read_text()
                 found = set()
                 covered = {}
                 for block in re.findall(r"@font-face\s*\{([^}]+)\}", css):
@@ -114,7 +132,7 @@ class WebfontTests(unittest.TestCase):
                     style = re.search(r"font-style: (\w+)", block)[1]
                     found.add((weight, style))
                     name = re.search(r"url\('([^']+)'\)", block)[1]
-                    with TTFont(out / name) as font:
+                    with TTFont(webfont_dir / name) as font:
                         self.assertEqual(font["OS/2"].usWeightClass, weight)
                         self.assertEqual(bool(font["OS/2"].fsSelection & 1), style == "italic")
                         points = set(font.getBestCmap())
@@ -125,31 +143,41 @@ class WebfontTests(unittest.TestCase):
                 for points in covered.values():
                     self.assertEqual(points, {32, 65, 0x4E00, 0x20000})
 
-    def test_conversion_failure_preserves_existing_output(self):
+    def test_split_ascii_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            regular = root / "PlemoCJK-SC-Regular.ttf"
-            bold = root / "PlemoCJK-SC-Bold.ttf"
-            self.make_font(regular)
-            self.make_font(bold, 700)
-            out = root / "SC"
-            out.mkdir()
-            css = out / "PlemoCJK-SC.css"
-            css.write_text("previous CSS")
-            original_subset = webfont.subset_font
+            ttf = Path(tmp) / "PlemoCJK-SC-Regular.ttf"
+            self.make_font(ttf)
+            with patch.object(webfont, "load_slices", return_value=["U+20-40", "U+41-7F"]):
+                with self.assertRaisesRegex(RuntimeError, "ASCII split"):
+                    webfont.process_region("SC", [ttf], Path(tmp), "PlemoCJK")
 
-            def fail_on_bold(source, dest, points):
-                if source == bold:
-                    raise RuntimeError("conversion failed")
-                original_subset(source, dest, points)
+    def test_conversion_failure_preserves_existing_output(self):
+        for pool in (None, ThreadPoolExecutor(2)):
+            with self.subTest(pool=pool), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                regular = root / "PlemoCJK-SC-Regular.ttf"
+                bold = root / "PlemoCJK-SC-Bold.ttf"
+                self.make_font(regular)
+                self.make_font(bold, 700)
+                out = root / "webfonts"
+                out.mkdir()
+                css = out / "PlemoCJK-SC.css"
+                css.write_text("previous CSS")
+                original_subset = webfont.subset_font
 
-            with patch.object(webfont, "load_slices", return_value=["U+20-7F"]), \
-                 patch.object(webfont, "subset_font", side_effect=fail_on_bold):
-                with self.assertRaisesRegex(RuntimeError, "conversion failed"):
-                    webfont.process_region("SC", [regular, bold], out, "PlemoCJK")
-            self.assertEqual(css.read_text(), "previous CSS")
-            self.assertEqual(list(out.iterdir()), [css])
+                def fail_on_bold(source, dest, points):
+                    if source == bold:
+                        raise RuntimeError("conversion failed")
+                    original_subset(source, dest, points)
 
+                with patch.object(webfont, "load_slices", return_value=["U+20-7F"]), \
+                     patch.object(webfont, "subset_font", side_effect=fail_on_bold):
+                    with self.assertRaisesRegex(RuntimeError, "conversion failed"):
+                        webfont.process_region("SC", [regular, bold], out, "PlemoCJK", pool)
+                self.assertEqual(css.read_text(), "previous CSS")
+                self.assertEqual(list(out.iterdir()), [css])
+            if pool:
+                pool.shutdown()
 
 if __name__ == "__main__":
     unittest.main()
