@@ -14,16 +14,45 @@ from fontTools.ttLib import TTFont
 import subset_webfont as webfont
 
 
+def resolve(rules, points):
+    """Map each codepoint to the slice CSS picks: the last rule whose range covers it."""
+    chosen = {}
+    for key, urange in rules:
+        for cp in webfont.parse_codepoints(urange) & points:
+            chosen[cp] = key
+    return chosen
+
+
+def css_rules(css):
+    """(weight, style, url, unicode-range) for each @font-face, in order."""
+    return [
+        (int(re.search(r"font-weight: (\d+)", b)[1]), re.search(r"font-style: (\w+)", b)[1],
+         re.search(r"url\('([^']+)'\)", b)[1], re.search(r"unicode-range: ([^;]+);", b)[1])
+        for b in re.findall(r"@font-face\s*\{([^}]+)\}", css)
+    ]
+
+
 class WebfontTests(unittest.TestCase):
     def test_last_rule_priority_and_supplemental_coverage(self):
-        points = {32, 65, 66, 0x4E00} | set(range(0x20000, 0x20201))
-        groups = webfont.plan_slices(points, ["U+41,U+4E00", "U+42", "U+20-7F"])
-        self.assertEqual(groups[:2], [{0x4E00}, {32, 65, 66}])
-        self.assertEqual([len(g) for g in groups[2:]], [256, 256, 1])
-        self.assertEqual(set.union(*groups), points)
+        points = {32, 65, 66, 0x4E00, 0x4E02} | set(range(0x20000, 0x20201))
+        slices = webfont.plan_slices(points, ["U+41,U+4E00", "U+42", "U+20-7F", "U+4E02"])
+        groups = [group for group, _ in slices]
+        # Supplemental spans come first; Google slices follow in their order.
+        self.assertEqual([len(g) for g in groups[:3]], [256, 256, 1])
+        self.assertEqual([urange for _, urange in slices[:3]],
+                         ["U+20000-200FF", "U+20100-201FF", "U+20200"])
+        self.assertEqual(groups[3:], [{0x4E00}, {32, 65, 66}, {0x4E02}])
         self.assertEqual(sum(map(len, groups)), len(points))
-        for group in groups:
-            self.assertEqual(webfont.parse_codepoints(webfont.format_codepoints(group)), group)
+        chosen = resolve(enumerate(u for _, u in slices), points)
+        self.assertTrue(all(cp in groups[i] for cp, i in chosen.items()))
+        self.assertEqual(set(chosen), points)
+
+    def test_span_yields_to_later_google_slice(self):
+        points = {0x3400, 0x3401, 0x3402}
+        slices = webfont.plan_slices(points, ["U+3401"])
+        self.assertEqual(slices, [({0x3400, 0x3402}, "U+3400-3402"), ({0x3401}, "U+3401")])
+        chosen = resolve(enumerate(u for _, u in slices), points)
+        self.assertEqual(chosen, {0x3400: 0, 0x3401: 1, 0x3402: 0})
 
     def test_missing_region_fails_before_conversion(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,13 +109,14 @@ class WebfontTests(unittest.TestCase):
             css = (webfont_dir / "PlemoCJK-SC.css").read_text()
             self.assertIn("font-family: 'PlemoCJK SC'", css)
             self.assertIn("url('SC/PlemoCJK-SC-Regular.1.woff2')", css)
-            ranges = webfont.parse_unicode_ranges(css)
-            self.assertEqual(len(ranges), 3)
+            self.assertEqual(css, (webfont_dir / "PlemoCJK-SC-Regular.css").read_text())
+            rules = css_rules(css)
+            self.assertEqual(len(rules), 3)
             covered = set()
-            for i, value in enumerate(ranges, 1):
-                with TTFont(out / f"PlemoCJK-SC-Regular.{i}.woff2") as font:
+            for _, _, url, urange in rules:
+                with TTFont(webfont_dir / url) as font:
                     actual = set(font.getBestCmap())
-                self.assertEqual(actual, webfont.parse_codepoints(value))
+                self.assertLessEqual(actual, webfont.parse_codepoints(urange))
                 covered.update(actual)
             self.assertEqual(covered, {32, 65, 0x4E00, 0x20000})
             self.assertFalse(stale.exists())
@@ -95,7 +125,7 @@ class WebfontTests(unittest.TestCase):
             self.assertFalse(old_bold.exists())
             self.assertEqual(unrelated.read_bytes(), b"keep")
 
-    def test_all_weights_and_italics_in_regional_css(self):
+    def test_per_style_and_default_css(self):
         weights = dict(zip(webfont.ALL_STYLES[:8], [100, 200, 300, 400, 450, 500, 600, 700]))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -122,26 +152,26 @@ class WebfontTests(unittest.TestCase):
                     for item in entry["files"]:
                         path = webfont_dir / item["file"]
                         self.assertEqual(webfont.sha256(path), item["sha256"])
+            points = {32, 65, 0x4E00, 0x20000}
             for region in webfont.REGION_TO_GOOGLE_FONT:
-                out = webfont_dir / region
-                css = (webfont_dir / f"PlemoCJK-{region}.css").read_text()
+                self.assertEqual(len(list((webfont_dir / region).glob("*.woff2"))), 48)
                 found = set()
-                covered = {}
-                for block in re.findall(r"@font-face\s*\{([^}]+)\}", css):
-                    weight = int(re.search(r"font-weight: (\d+)", block)[1])
-                    style = re.search(r"font-style: (\w+)", block)[1]
-                    found.add((weight, style))
-                    name = re.search(r"url\('([^']+)'\)", block)[1]
-                    with TTFont(webfont_dir / name) as font:
-                        self.assertEqual(font["OS/2"].usWeightClass, weight)
-                        self.assertEqual(bool(font["OS/2"].fsSelection & 1), style == "italic")
-                        points = set(font.getBestCmap())
-                        self.assertEqual(points, webfont.parse_codepoints(webfont.parse_unicode_ranges(block)[0]))
-                        covered.setdefault((weight, style), set()).update(points)
+                for style_name in webfont.ALL_STYLES:
+                    css = (webfont_dir / f"PlemoCJK-{region}-{style_name}.css").read_text()
+                    rules = css_rules(css)
+                    self.assertEqual(len({(w, s) for w, s, _, _ in rules}), 1)
+                    found.add(rules[0][:2])
+                    chosen = resolve([(url, u) for _, _, url, u in rules], points)
+                    self.assertEqual(set(chosen), points)
+                    for cp, url in chosen.items():
+                        with TTFont(webfont_dir / url) as font:
+                            self.assertEqual(font["OS/2"].usWeightClass, rules[0][0])
+                            self.assertEqual(bool(font["OS/2"].fsSelection & 1), rules[0][1] == "italic")
+                            self.assertIn(cp, font.getBestCmap())
                 self.assertEqual(found, expected)
-                self.assertEqual(len(list(out.glob("*.woff2"))), 48)
-                for points in covered.values():
-                    self.assertEqual(points, {32, 65, 0x4E00, 0x20000})
+                default = css_rules((webfont_dir / f"PlemoCJK-{region}.css").read_text())
+                self.assertEqual({(w, s) for w, s, _, _ in default},
+                                 {(400, "normal"), (700, "normal"), (400, "italic"), (700, "italic")})
 
     def test_split_ascii_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

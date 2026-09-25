@@ -30,15 +30,18 @@ Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
 ## Webfonts
 
 Each release publishes WOFF2 subsets of the default variant to the
-`webfonts` branch, served by GitHub Pages. One stylesheet per region covers
-every weight and italic; browsers download only the slices a page uses.
+`webfonts` branch, served by GitHub Pages. `PlemoCJK-SC.css` covers Regular,
+Bold and their italics; other weights have their own stylesheet, such as
+`PlemoCJK-SC-Light.css`. Browsers download only the slices a page uses.
 
 ```html
 <link rel="stylesheet" href="https://nexustar.github.io/PlemoCJK/PlemoCJK-SC.css">
 <style>code, pre { font-family: "PlemoCJK SC", monospace; }</style>
 ```
 
-Replace `SC` with `TC`, `JP` or `KR` for other regions.
+Replace `SC` with `TC`, `JP` or `KR` for other regions. Available weights:
+Thin, ExtraLight, Light, Regular, Text (450), Medium, SemiBold, Bold, each
+with an Italic.
 
 ## Building
 

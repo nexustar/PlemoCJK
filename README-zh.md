@@ -33,14 +33,16 @@ Natural 使用西文与 CJK 字宽 3:5 的比例。例如简中字体族名为
 ## 网页字体
 
 每次发布都会把 default 变体的 WOFF2 分片发布到 `webfonts` 分支，由 GitHub Pages
-提供访问。每个地区一个 CSS，包含所有字重和斜体；浏览器只下载页面用到的分片。
+提供访问。`PlemoCJK-SC.css` 包含 Regular、Bold 及其斜体；其他字重各有单独的 CSS，
+如 `PlemoCJK-SC-Light.css`。浏览器只下载页面用到的分片。
 
 ```html
 <link rel="stylesheet" href="https://nexustar.github.io/PlemoCJK/PlemoCJK-SC.css">
 <style>code, pre { font-family: "PlemoCJK SC", monospace; }</style>
 ```
 
-其他地区把 `SC` 换成 `TC`、`JP` 或 `KR`。
+其他地区把 `SC` 换成 `TC`、`JP` 或 `KR`。可用字重：Thin、ExtraLight、Light、Regular、
+Text（450）、Medium、SemiBold、Bold，均有对应斜体。
 
 ## 构建
 

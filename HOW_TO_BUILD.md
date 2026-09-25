@@ -134,14 +134,19 @@ python3 subset_webfont.py build
 ```
 
 Converts all built default-variant weights and italics; each style must have
-SC/TC/JP/KR inputs. Regular-only builds also work. Output:
-`build/release/PlemoCJK_webfont_VERSION/PlemoCJK-SC.css` with slices in `SC/`
-(likewise TC/JP/KR).
+SC/TC/JP/KR inputs. Regular-only builds also work. Output in
+`build/release/PlemoCJK_webfont_VERSION/`, per region (likewise TC/JP/KR):
+
+- `PlemoCJK-SC.css`: Regular, Bold and their italics
+- `PlemoCJK-SC-Light.css` etc.: one style each
+- `SC/`: WOFF2 slices
+
 Use `font-family: "PlemoCJK SC", monospace` and select weight/style in CSS.
 
-Each regional CSS includes every generated style. Subsets retain full character
-coverage and Google's range priority. The output also carries licenses, a
-README and `manifest.json` (source and WOFF2 hashes).
+Subsets retain full character coverage and Google's range priority.
+Characters outside Google's ranges go into slices declared first with a
+single span each; later Google slices win where spans overlap. The output
+also carries licenses, a README and `manifest.json` (source and WOFF2 hashes).
 
 On `v`-prefixed tags the Action packages webfonts into the release and, for
 full builds, force-pushes them as a single orphan commit to the `webfonts`

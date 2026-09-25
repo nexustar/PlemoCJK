@@ -37,6 +37,9 @@ CACHE_DIR = Path(__file__).parent / ".webfont_cache"
 
 PRINTABLE_ASCII = set(range(0x20, 0x7F))
 
+# Styles in the regional default CSS; every style also gets its own CSS.
+DEFAULT_CSS_STYLES = ("Regular", "Bold", "Italic", "BoldItalic")
+
 # Source fonts of the default variant (no Nerd Fonts).
 LICENSES = {
     "source/LICENSE_IBM-Plex": "LICENSE_IBM-Plex",
@@ -105,20 +108,25 @@ def format_codepoints(points: set[int]) -> str:
     )
 
 
-def plan_slices(points: set[int], ranges: list[str]) -> list[set[int]]:
-    """Resolve overlaps as CSS does, then retain all remaining source characters."""
+def plan_slices(points: set[int], ranges: list[str]) -> list[tuple[set[int], str]]:
+    """Split POINTS into (codepoints, unicode-range) slices, in CSS order.
+
+    Overlapping Google ranges resolve as CSS does (last rule wins), keeping
+    Latin together. Characters outside them go into 256-codepoint slices
+    placed first, so each can use a single span: later rules win wherever a
+    span overlaps a Google slice.
+    """
     remaining = set(points)
     groups = []
-    # CSS checks overlapping rules last-first; keep Latin together.
     for value in reversed(ranges):
         group = parse_codepoints(value) & remaining
         if group:
-            groups.append(group)
+            groups.append((group, format_codepoints(group)))
             remaining -= group
     groups.reverse()
     extra = sorted(remaining)
-    groups.extend(set(extra[i:i + 256]) for i in range(0, len(extra), 256))
-    return groups
+    spans = [extra[i:i + 256] for i in range(0, len(extra), 256)]
+    return [(set(s), format_codepoints(set(range(s[0], s[-1] + 1)))) for s in spans] + groups
 
 
 def subset_font(input_ttf: Path, output_woff2: Path, points: set[int]) -> None:
@@ -222,7 +230,7 @@ def process_region(
     font_name: str,
     pool: Executor | None = None,
 ) -> list[dict]:
-    """Write WEBFONT_DIR/<font>-<region>.css and its slices in WEBFONT_DIR/<region>/.
+    """Write per-style CSS and the default CSS to WEBFONT_DIR, slices to WEBFONT_DIR/<region>/.
 
     Slices are converted on POOL when given. Returns manifest entries.
     """
@@ -231,7 +239,8 @@ def process_region(
     font_dir = webfont_dir / region
     canonical = font_name.replace(" ", "")
     css_name = f"{canonical}-{region}.css"
-    rules = []
+    style_css = {}
+    default_rules = []
     expected = set()
     entries = []
     jobs = []
@@ -246,7 +255,8 @@ def process_region(
                 style = "italic" if font["OS/2"].fsSelection & 1 else "normal"
             if not points:
                 raise RuntimeError(f"No Unicode cmap: {input_ttf}")
-            groups = plan_slices(points, ranges)
+            slices = plan_slices(points, ranges)
+            groups = [group for group, _ in slices]
             if sum(map(len, groups)) != len(points) or set().union(*groups) != points:
                 raise RuntimeError(f"Slices do not partition the cmap: {input_ttf}")
             ascii_points = PRINTABLE_ASCII & points
@@ -254,19 +264,24 @@ def process_region(
                 raise RuntimeError(f"Printable ASCII split across slices: {input_ttf}")
             css_slices = []
             names = []
-            for idx, group in enumerate(groups, 1):
+            for idx, (group, urange) in enumerate(slices, 1):
                 name = f"{input_ttf.stem}.{idx}.woff2"
                 jobs.append((input_ttf, staging / name, group))
                 names.append(name)
-                css_slices.append((idx, format_codepoints(group), f"{region}/{name}"))
+                css_slices.append((idx, urange, f"{region}/{name}"))
             expected.update(names)
-            rules.append(generate_css(f"{font_name} {region}", css_slices, weight, style))
+            rule = generate_css(f"{font_name} {region}", css_slices, weight, style)
+            style_name = input_ttf.stem.rsplit("-", 1)[1]
+            style_css[f"{canonical}-{region}-{style_name}.css"] = rule
+            if style_name in DEFAULT_CSS_STYLES:
+                default_rules.append(rule)
             entries.append({
                 "source": input_ttf.name,
                 "source_sha256": sha256(input_ttf),
                 "weight": weight,
                 "style": style,
                 "codepoints": len(points),
+                "css": f"{canonical}-{region}-{style_name}.css",
                 "files": names,
             })
         run_jobs(jobs, pool)
@@ -276,11 +291,14 @@ def process_region(
                 for name in entry["files"]
             ]
             print(f"  {entry['source']}: {len(entry['files'])} slices, {entry['codepoints']} codepoints")
-        (staging / css_name).write_text("\n".join(rules), encoding="utf-8")
+        style_css[css_name] = "\n".join(default_rules or style_css.values())
+        for name, css in style_css.items():
+            (staging / name).write_text(css, encoding="utf-8")
         font_dir.mkdir(exist_ok=True)
         for path in staging.glob("*.woff2"):
             path.replace(font_dir / path.name)
-        (staging / css_name).replace(webfont_dir / css_name)
+        for name in style_css:
+            (staging / name).replace(webfont_dir / name)
         # CSS used to live inside the region directory.
         (font_dir / css_name).unlink(missing_ok=True)
         for old_style in ALL_STYLES:
@@ -289,6 +307,8 @@ def process_region(
                     if path.name not in expected:
                         path.unlink()
                 (font_dir / f"{stem}.css").unlink(missing_ok=True)
+                if f"{stem}.css" not in style_css:
+                    (webfont_dir / f"{stem}.css").unlink(missing_ok=True)
     return entries
 
 
@@ -319,13 +339,15 @@ def write_extras(webfont_dir: Path, font_name: str, version: str, manifest: dict
         shutil.copy2(root / src, licenses / name)
     (webfont_dir / ".nojekyll").touch()
     family = f"{font_name} SC"
-    css = f"{font_name.replace(' ', '')}-SC.css"
+    canonical = font_name.replace(" ", "")
     (webfont_dir / "README.md").write_text(
         f"# {font_name} webfonts {version}\n\n"
-        "Default variant for SC / TC / JP / KR. Each regional CSS covers every\n"
-        "built weight and italic; browsers load only the slices a page uses.\n\n"
+        f"Default variant for SC / TC / JP / KR. `{canonical}-SC.css` holds Regular,\n"
+        f"Bold and their italics; `{canonical}-SC-Light.css` and the like hold one\n"
+        "style each. Browsers load only the slices a page uses.\n\n"
         "```html\n"
-        f'<link rel="stylesheet" href="{css}">\n'
+        f'<link rel="stylesheet" href="{canonical}-SC.css">\n'
+        f'<link rel="stylesheet" href="{canonical}-SC-Light.css">\n'
         f"<style>code, pre {{ font-family: '{family}', monospace; }}</style>\n"
         "```\n\n"
         "Replace SC with TC, JP or KR for regional glyph forms. `manifest.json`\n"
