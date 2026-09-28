@@ -147,7 +147,8 @@ def usage():
         f"Usage: {sys.argv[0]} "
         "[--hidden-zenkaku-space] [--35] [--36] [--console] [--nerd-font] "
         "[--variant-name TAG] "
-        "[--styles Regular,Bold,...] [--region SC|TC|JP|KR] [--eng-only]"
+        "[--styles Regular,Bold,...] [--region SC|TC|JP|KR] [--eng-only] "
+        "[--cjk-reference SC|TC|JP|KR]"
     )
 
 
@@ -202,6 +203,12 @@ def get_options():
             skip_next = True
         elif arg == "--eng-only":
             options["eng-only"] = True
+        elif arg == "--cjk-reference":
+            if index + 1 >= len(sys.argv):
+                options["unknown-option"] = True
+                return
+            options["cjk-reference"] = sys.argv[index + 1]
+            skip_next = True
         elif arg == "--variant-name":
             if index + 1 >= len(sys.argv):
                 options["unknown-option"] = True
@@ -354,10 +361,11 @@ def generate_font(jp_style, eng_style, merged_style):
 def cjk_font_path(jp_style: str) -> str:
     """Return the path to the CJK-side input font.
 
-    PlemoCJK: when --region is given, use the per-region font built by prepare_cjk.py.
-    Without a region, fall back to IBM Plex Sans JP as in upstream PlemolJP.
+    PlemoCJK: --region (or --cjk-reference for --eng-only builds, whose glyph
+    choices depend on the CJK codepoints) selects the prepare_cjk.py font;
+    otherwise IBM Plex Sans JP as in upstream PlemolJP.
     """
-    region = options.get("region")
+    region = options.get("region") or options.get("cjk-reference")
     if region:
         return (
             SOURCE_FONTS_DIR
@@ -1071,7 +1079,14 @@ def merge_hack(jp_font, eng_font, style):
                     pass
     else:
         # 既に日本語フォント側に存在する場合はhackグリフは削除する
+        # PlemoCJK: except Powerline, where Hack wins over legacy Big5 aliases
+        hack_unicodes = {
+            g.unicode for g in hack_font.glyphs() if g.unicode != -1 and g.isWorthOutputting()
+        }
         for glyph in jp_font.glyphs():
+            if 0xE0A0 <= glyph.unicode <= 0xE0D4 and glyph.unicode in hack_unicodes:
+                glyph.clear()
+                continue
             if glyph.unicode != -1:
                 try:
                     for g in hack_font.selection.select(

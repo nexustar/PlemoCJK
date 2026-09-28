@@ -164,7 +164,8 @@ build_eng() {
     echo "FontForge (eng): ${variant} [${options}]"
     # shellcheck disable=SC2086
     fontforge -lang=py -script fontforge_script.py \
-        --do-not-delete-build-dir --eng-only --variant-name "$tag" ${DEBUG_OPTS} ${STYLE_OPTS} ${options}
+        --do-not-delete-build-dir --eng-only --cjk-reference "${REGION_LIST[0]}" \
+        --variant-name "$tag" ${DEBUG_OPTS} ${STYLE_OPTS} ${options}
     echo "ttfautohint (eng): ${variant} [${tag}]"
     python3 fonttools_script.py --eng-hint "${tag}-" "${wmode}"
 }
