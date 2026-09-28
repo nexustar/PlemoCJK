@@ -113,6 +113,109 @@ def is_half_width_hangul(unicode_value):
     return any(start <= unicode_value <= end for start, end in HALF_WIDTH_HANGUL)
 
 
+# Full-width from the CJK side in non-console variants; Mono's half form becomes .hw.
+FULL_WIDTH_SYMS = [
+    # em/CJK dashes and leaders
+    0x2014, 0x2015, 0x2025, 0x2026,
+    # CJK-flavoured marks
+    0x2030, 0x203B, 0x203E, 0x2116, 0x2121,
+    # arrows
+    0x2190, 0x2191, 0x2192, 0x2193,
+    0x2196, 0x2197, 0x2198, 0x2199,
+    0x21C4, 0x21C5, 0x21C6, 0x21D2, 0x21D4,
+    0x21E6, 0x21E7, 0x21E8, 0x21E9, 0x21F5,
+]
+
+# East Asian Ambiguous Width glyphs Term narrows to half (also the hwid forms).
+# ref: https://www.unicode.org/Public/15.1.0/ucd/EastAsianWidth.txt
+EAAW_UNICODES = (
+    0x203B, 0x2103, 0x2109, 0x2121, 0x212B,
+    *range(0x2160, 0x216B + 1),
+    *range(0x2170, 0x217B + 1),
+    0x221F, 0x222E,
+    *range(0x226A, 0x226B + 1),
+    0x22A5, 0x22BF, 0x2312,
+    *range(0x2460, 0x2490 + 1),
+    *range(0x249C, 0x24B5 + 1),
+    *range(0x2605, 0x2606 + 1),
+    0x260E, 0x261C, 0x261E, 0x2640, 0x2642,
+    *range(0x2660, 0x2665 + 1),
+    0x2667, 0x266A, 0x266D, 0x266F, 0x1F100,
+)
+
+
+def make_hw_alternate(font, cp, name):
+    """Copy the glyph at `cp` into a new unencoded glyph `name`; None if absent."""
+    try:
+        src = font[cp]
+    except TypeError:
+        return None
+    if name in font:
+        return font[name]
+    dst = font.createChar(-1, name)
+    font.selection.select(("unicode", None), cp)
+    font.copy()
+    font.selection.select(("encoding", None), dst.encoding)
+    font.paste()
+    font.selection.none()
+    dst.unlinkRef()
+    dst.width = src.width
+    return dst
+
+
+def prune_hw_alternates(eng_font, jp_font):
+    """Drop .hw alternates whose encoded glyph is not wider."""
+    for font in (eng_font, jp_font):
+        for glyph in list(font.glyphs()):
+            name = glyph.glyphname
+            if not (name.startswith("uni") and name.endswith(".hw")):
+                continue
+            cp = int(name[3:-3], 16)
+            base = None
+            for f in (eng_font, jp_font):
+                try:
+                    if f[cp].isWorthOutputting():
+                        base = f[cp]
+                        break
+                except TypeError:
+                    pass
+            if base is None or base.width <= glyph.width:
+                font.removeGlyph(glyph)
+
+
+def snapshot_hw_forms(eng_font, lo, hi, skip=()):
+    """Keep the current half-width eng glyphs in [lo, hi] as .hw alternates."""
+    for cp in range(lo, hi + 1):
+        if cp not in skip:
+            make_hw_alternate(eng_font, cp, f"uni{cp:04X}.hw")
+
+
+def add_eaaw_hw_forms(jp_font, eng_font):
+    """Squeeze CJK EAAW glyphs into .hw alternates as and where Term's
+    eaaw_width_to_half does. Skips codepoints the eng side serves."""
+    half_width = 500
+    for cp in EAAW_UNICODES:
+        if f"uni{cp:04X}.hw" in eng_font:
+            continue
+        try:
+            eng_font[cp]
+            continue
+        except TypeError:
+            pass
+        try:
+            src = jp_font[cp]
+        except TypeError:
+            continue
+        if not src.isWorthOutputting() or src.width <= half_width:
+            continue
+        dst = make_hw_alternate(jp_font, cp, f"uni{cp:04X}.hw")
+        if dst is None:
+            continue
+        dst.transform(psMat.scale(0.67, 0.9))
+        dst.transform(psMat.translate((half_width - dst.width) / 2, 0))
+        dst.width = half_width
+
+
 def main():
     # オプション判定
     get_options()
@@ -231,6 +334,8 @@ def generate_font(jp_style, eng_style, merged_style):
 
     # Hack フォントをマージする
     merge_hack(jp_font, eng_font, merged_style)
+    if not options.get("console"):
+        add_eaaw_hw_forms(jp_font, eng_font)
 
     if options.get("console"):
         # East Asian Ambiguous Width 文字の半角化
@@ -277,6 +382,13 @@ def generate_font(jp_style, eng_style, merged_style):
     # fit block elements to the line height (all variants)
     fit_block_line_height(eng_font)
     if not options.get("console"):
+        # hwid half forms, before widening
+        snapshot_hw_forms(eng_font, 0x2500, 0x257F)  # box drawing
+        # block elements (skip the ░▒▓ shades)
+        snapshot_hw_forms(eng_font, 0x2580, 0x259F, skip=range(0x2591, 0x2594))
+        # half shades, as in Term
+        apply_shade_blocks(eng_font, merged_style, eng_font[0x0030].width, doubled=False)
+        snapshot_hw_forms(eng_font, 0x2591, 0x2593)
         # box drawing to full width
         make_box_drawing_full_width(eng_font, jp_font)
         # block elements to full width
@@ -315,6 +427,9 @@ def generate_font(jp_style, eng_style, merged_style):
         )
         variant += NERD_FONTS_STR if options.get("nerd-font") else ""
         variant = variant.strip()
+
+    if not options.get("console"):
+        prune_hw_alternates(eng_font, jp_font)
 
     # macOSでのpostテーブルの使用性エラー対策
     # 重複するグリフ名を持つグリフをリネームする
@@ -492,17 +607,22 @@ def adjust_some_glyph(jp_font, eng_font, style="Regular"):
         eng_font.mergeFonts(f"{SOURCE_FONTS_DIR}/" + ADJUST_R.replace("{style}", style))
 
     # 矢印記号の読みづらさ対策
-    for uni in [*range(0x21CD, 0x21CF + 1), 0x21D0, 0x21D2, 0x21D4, 0x21DA, 0x21DB]:
+    # PlemoCJK: include .hw alternates
+    def arrow_glyphs(uni):
         eng_font.selection.select(("unicode", None), uni)
-        for glyph in eng_font.selection.byGlyphs:
+        glyphs = list(eng_font.selection.byGlyphs)
+        if f"uni{uni:04X}.hw" in eng_font:
+            glyphs.append(eng_font[f"uni{uni:04X}.hw"])
+        return glyphs
+
+    for uni in [*range(0x21CD, 0x21CF + 1), 0x21D0, 0x21D2, 0x21D4, 0x21DA, 0x21DB]:
+        for glyph in arrow_glyphs(uni):
             scale_glyph_from_center(glyph, 1, 1.3)
     for uni in [0x21D1, 0x21D3]:
-        eng_font.selection.select(("unicode", None), uni)
-        for glyph in eng_font.selection.byGlyphs:
+        for glyph in arrow_glyphs(uni):
             scale_glyph_from_center(glyph, 1.3, 1)
     for uni in range(0x21D6, 0x21D9 + 1):
-        eng_font.selection.select(("unicode", None), uni)
-        for glyph in eng_font.selection.byGlyphs:
+        for glyph in arrow_glyphs(uni):
             scale_glyph_from_center(glyph, 1.3, 1.3)
 
     # 選択解除
@@ -682,26 +802,14 @@ def delete_not_console_glyphs(eng_font):
       stay full-width from the JP side, like upstream -- squeezing them to half
       would thin their strokes and distort circles.
     """
-    full_width_syms = [
-        # em/CJK dashes and leaders
-        0x2014, 0x2015, 0x2025, 0x2026,
-        # CJK-flavoured marks
-        0x2030, 0x203B, 0x203E, 0x2116, 0x2121,
-        # arrows
-        0x2190, 0x2191, 0x2192, 0x2193,
-        0x2196, 0x2197, 0x2198, 0x2199,
-        0x21C4, 0x21C5, 0x21C6, 0x21D2, 0x21D4,
-        0x21E6, 0x21E7, 0x21E8, 0x21E9, 0x21F5,
-    ]
-    eng_font.selection.none()
-    for cp in full_width_syms:
+    for cp in FULL_WIDTH_SYMS:
         try:
-            eng_font.selection.select(("more", "unicode"), cp)
-        except ValueError:
+            glyph = eng_font[cp]
+        except TypeError:
             # eng font lacks this codepoint; the JP glyph already survives.
             continue
-
-    for glyph in eng_font.selection.byGlyphs:
+        # keep Mono's half form as a .hw alternate
+        make_hw_alternate(eng_font, cp, f"uni{cp:04X}.hw")
         glyph.clear()
 
     eng_font.selection.none()
@@ -1088,22 +1196,23 @@ def merge_hack(jp_font, eng_font, style):
                     pass
     else:
         # 既に日本語フォント側に存在する場合はhackグリフは削除する
-        # PlemoCJK: except Powerline, where Hack wins over legacy Big5 aliases
-        hack_unicodes = {
-            g.unicode for g in hack_font.glyphs() if g.unicode != -1 and g.isWorthOutputting()
-        }
-        for glyph in jp_font.glyphs():
-            if 0xE0A0 <= glyph.unicode <= 0xE0D4 and glyph.unicode in hack_unicodes:
-                glyph.clear()
+        # PlemoCJK: keep them as .hw alternates (Term's forms), except Greek;
+        # for Powerline, Hack wins over the CJK side's legacy Big5 aliases
+        jp_unicodes = {g.unicode for g in jp_font.glyphs() if g.unicode != -1}
+        for glyph in hack_font.glyphs():
+            cp = glyph.unicode
+            if cp == -1 or cp not in jp_unicodes:
                 continue
-            if glyph.unicode != -1:
-                try:
-                    for g in hack_font.selection.select(
-                        ("unicode", None), glyph.unicode
-                    ).byGlyphs:
-                        g.clear()
-                except Exception:
-                    pass
+            if 0xE0A0 <= cp <= 0xE0D4 and glyph.isWorthOutputting():
+                for g in jp_font.selection.select(("unicode", None), cp).byGlyphs:
+                    g.clear()
+                continue
+            if is_greek(cp) or not glyph.isWorthOutputting():
+                glyph.clear()
+            else:
+                glyph.altuni = None
+                glyph.unicode = -1
+                glyph.glyphname = f"uni{cp:04X}.hw"
     # EM 1000 にしたときの幅に合わせて調整
     half_width = int(FULL_WIDTH_35 * 3 / 5)
     for glyph in hack_font.glyphs():
@@ -1121,37 +1230,7 @@ def merge_hack(jp_font, eng_font, style):
 
 def eaaw_width_to_half(jp_font):
     """East Asian Ambiguous Width 文字の半角化"""
-    # ref: https://www.unicode.org/Public/15.1.0/ucd/EastAsianWidth.txt
-
-    eaaw_unicode_list = (
-        0x203B,  # REFERENCE MARK
-        0x2103,
-        0x2109,
-        0x2121,
-        0x212B,
-        *range(0x2160, 0x216B + 1),
-        *range(0x2170, 0x217B + 1),
-        0x221F,
-        0x222E,
-        *range(0x226A, 0x226B + 1),
-        0x22A5,
-        0x22BF,
-        0x2312,
-        *range(0x2460, 0x2490 + 1),
-        *range(0x249C, 0x24B5 + 1),
-        *range(0x2605, 0x2606 + 1),
-        0x260E,
-        0x261C,
-        0x261E,
-        0x2640,
-        0x2642,
-        *range(0x2660, 0x2665 + 1),
-        0x2667,
-        0x266A,
-        0x266D,
-        0x266F,
-        0x1F100,
-    )
+    eaaw_unicode_list = set(EAAW_UNICODES)
     half_width = 500
     for glyph in jp_font.glyphs():
         if glyph.unicode in eaaw_unicode_list and glyph.width > half_width:

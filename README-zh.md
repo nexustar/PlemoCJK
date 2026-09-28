@@ -27,6 +27,11 @@ ASCII 部分的观感与 PlemolJP 一致。
 ² 箭头（← → ⇒）、几何图形（■ ● ★）、圈号 / 罗马数字（① Ⅰ）以及 … ※ № 等记号
 在 `default` 和 `Natural` 里保持全角；`Term` 把所有歧义宽度字形都做成半角以适配终端网格。
 
+`default` 和 `Natural` 提供 `hwid`（半角）OpenType 特性：开启后把这些全角歧义字形——
+箭头、CJK 记号、块元素、制表符、圈号 / 罗马数字、℃ ∮ 等——切换为半角（与 `Term` 一致），
+例如 CSS `font-feature-settings: "hwid"`；已是半角的字形不受影响。需要和终端列宽对齐时
+使用，例如代码块里的命令行输出。
+
 Natural 使用西文与 CJK 字宽 3:5 的比例。例如简中字体族名为
 `PlemoCJK Natural SC`，文件名为 `PlemoCJK-Natural-SC-Regular.ttf`。
 
@@ -38,7 +43,10 @@ Natural 使用西文与 CJK 字宽 3:5 的比例。例如简中字体族名为
 
 ```html
 <link rel="stylesheet" href="https://nexustar.github.io/PlemoCJK/PlemoCJK-SC.css">
-<style>code, pre { font-family: "PlemoCJK SC", monospace; }</style>
+<style>
+  body { font-family: "PlemoCJK SC", monospace; }
+  pre  { font-feature-settings: "hwid"; }  /* 制表符、箭头等改为半角 */
+</style>
 ```
 
 其他地区把 `SC` 换成 `TC`、`JP` 或 `KR`。可用字重：Thin、ExtraLight、Light、Regular、

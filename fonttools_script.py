@@ -3,11 +3,14 @@
 import configparser
 import glob
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from fontTools import merge, ttLib, ttx
+from fontTools.otlLib.builder import buildLookup, buildSingleSubstSubtable
+from fontTools.ttLib.tables import otTables
 from ttfautohint import options, ttfautohint
 
 import plemocjk_config
@@ -146,6 +149,49 @@ def add_hinting(input_font_path, output_font_path, width_mode, style):
     ttfautohint(**options_)
 
 
+def add_hwid_feature(font):
+    """Add a hwid feature mapping each cmap glyph to its narrower uniXXXX.hw
+    alternate, appended to GSUB (feaLib would replace the whole table)."""
+    cmap = font.getBestCmap()
+    advance = font["hmtx"].metrics
+    mapping = {}
+    for name in font.getGlyphOrder():
+        mo = re.match(r"^uni([0-9A-Fa-f]{4,6})\.hw$", name)
+        if not mo:
+            continue
+        base = cmap.get(int(mo.group(1), 16))
+        if base and base != name and advance[base][0] > advance[name][0]:
+            mapping[base] = name
+    if not mapping or "GSUB" not in font:
+        return
+
+    gsub = font["GSUB"].table
+    lookup = buildLookup([buildSingleSubstSubtable(mapping)], flags=0)
+    gsub.LookupList.Lookup.append(lookup)
+    lookup_index = len(gsub.LookupList.Lookup) - 1
+    gsub.LookupList.LookupCount = len(gsub.LookupList.Lookup)
+
+    feature = otTables.Feature()
+    feature.FeatureParams = None
+    feature.LookupListIndex = [lookup_index]
+    feature.LookupCount = 1
+    record = otTables.FeatureRecord()
+    record.FeatureTag = "hwid"
+    record.Feature = feature
+    gsub.FeatureList.FeatureRecord.append(record)
+    feature_index = len(gsub.FeatureList.FeatureRecord) - 1
+    gsub.FeatureList.FeatureCount = len(gsub.FeatureList.FeatureRecord)
+
+    for script_record in gsub.ScriptList.ScriptRecord:
+        script = script_record.Script
+        lang_syses = [lr.LangSys for lr in script.LangSysRecord]
+        if script.DefaultLangSys is not None:
+            lang_syses.append(script.DefaultLangSys)
+        for lang_sys in lang_syses:
+            lang_sys.FeatureIndex.append(feature_index)
+            lang_sys.FeatureCount = len(lang_sys.FeatureIndex)
+
+
 def merge_fonts(style, variant, eng_variant=None):
     """フォントを結合する"""
     # PlemoCJK: the alphanumeric side is region-independent, so look it up without the region modifier
@@ -165,6 +211,8 @@ def merge_fonts(style, variant, eng_variant=None):
     # フォントを結合
     merger = merge.Merger()
     merged_font = merger.merge([eng_font_path, jp_font_path])
+    # PlemoCJK: hwid for non-console variants
+    add_hwid_feature(merged_font)
     merged_font.save(
         f"{BUILD_FONTS_DIR}/{FONTTOOLS_PREFIX}{FONT_NAME}{variant}-{style}_merged.ttf"
     )

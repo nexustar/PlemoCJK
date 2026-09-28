@@ -24,6 +24,13 @@ Three variants:
 and marks such as … ※ № stay full-width in `default` and `Natural`; `Term`
 makes every ambiguous-width glyph half-width for terminal grids.
 
+In `default` and `Natural`, the `hwid` (Half Widths) OpenType feature switches
+those full-width ambiguous glyphs — arrows, CJK marks, block elements, box
+drawing, circled / Roman numbers, ℃ ∮ … — to half-width (matching `Term`),
+e.g. CSS `font-feature-settings: "hwid"`. It leaves already-half glyphs
+untouched. Use it where text must line up with terminal column widths, such as
+command-line output in code blocks.
+
 Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
 `PlemoCJK Natural SC`, with file `PlemoCJK-Natural-SC-Regular.ttf`.
 
@@ -36,7 +43,10 @@ Bold and their italics; other weights have their own stylesheet, such as
 
 ```html
 <link rel="stylesheet" href="https://nexustar.github.io/PlemoCJK/PlemoCJK-SC.css">
-<style>code, pre { font-family: "PlemoCJK SC", monospace; }</style>
+<style>
+  body { font-family: "PlemoCJK SC", monospace; }
+  pre  { font-feature-settings: "hwid"; }  /* half-width box drawing, arrows… */
+</style>
 ```
 
 Replace `SC` with `TC`, `JP` or `KR` for other regions. Available weights:
