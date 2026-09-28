@@ -1045,6 +1045,10 @@ def visualize_zenkaku_space(jp_font):
     jp_font.selection.none()
 
 
+def is_greek(cp):
+    return 0x0370 <= cp <= 0x03FF or 0x1F00 <= cp <= 0x1FFF
+
+
 def merge_hack(jp_font, eng_font, style):
     """Hack フォントをマージする"""
     if "Bold" in style:
@@ -1068,7 +1072,12 @@ def merge_hack(jp_font, eng_font, style):
                 pass
     if options.get("console"):
         # Console版では、日本語フォントよりhackフォントのグリフを優先する
+        # PlemoCJK: except Greek, taken from the CJK side in every variant
+        jp_unicodes = {g.unicode for g in jp_font.glyphs() if g.unicode != -1}
         for glyph in hack_font.glyphs():
+            if is_greek(glyph.unicode) and glyph.unicode in jp_unicodes:
+                glyph.clear()
+                continue
             if glyph.unicode != -1:
                 try:
                     for g in jp_font.selection.select(
@@ -1230,6 +1239,8 @@ def add_nerd_font_glyphs(jp_font, eng_font):
             f"{SOURCE_FONTS_DIR}/nerd-fonts/SymbolsNerdFont-Regular.ttf"
         )
         nerd_font.em = EM_ASCENT + EM_DESCENT
+        # PlemoCJK: keep the text ♥; the icon overflows the cell
+        nerd_font.removeGlyph(nerd_font[0x2665])
         glyph_names = set()
         for nerd_glyph in nerd_font.glyphs():
             # Nerd Fontsのグリフ名をユニークにするため接尾辞を付ける
