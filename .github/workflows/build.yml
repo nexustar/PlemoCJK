@@ -269,6 +269,69 @@ jobs:
           retention-days: 7
           compression-level: 1
 
+  # Webfonts ship only on npm: one runner per variant, trusted publishing.
+  webfonts:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        variant: ${{ fromJson(needs.prepare.outputs.variants) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - run: pip install "fonttools==4.63.0" brotli
+
+      - name: Collect variant TTFs
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ttf-${{ matrix.variant }}-*
+          path: build
+          merge-multiple: true
+
+      - name: Generate webfont subsets
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          python3 -m unittest -v test_subset_webfont
+          python3 subset_webfont.py build --variant "$VARIANT"
+          python3 npm_packages.py build/release/*_webfont_*/ build/npm
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: npm-${{ matrix.variant }}
+          path: build/npm/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      # trusted publishing needs npm >= 11.5.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        if: ${{ !inputs.debug }}
+        run: |
+          npm install -g npm@latest
+          for dir in build/npm/*/; do
+            name="$(node -p "require('./${dir}package.json').name")"
+            version="$(node -p "require('./${dir}package.json').version")"
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "skip ${name}@${version}: already published"
+              continue
+            fi
+            (cd "$dir" && npm publish --access public)
+          done
+
   # Collect verified TTFs and TTCs only after every variant succeeds.
   package:
     needs: bundle
@@ -281,10 +344,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-
-      - name: Install webfont dependencies
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: pip install "fonttools==4.63.0" brotli
 
       - name: Collect all TTFs
         uses: actions/download-artifact@v5
@@ -313,20 +372,6 @@ jobs:
           fi
           ./release.sh
 
-      - name: Generate webfont subsets
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          python3 -m unittest -v test_subset_webfont
-          python3 subset_webfont.py
-
-      - name: Package webfont archive
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          cd build/release
-          webfont_dir="$(ls -d PlemoCJK_webfont_* 2>/dev/null | head -1)"
-          if [ -n "$webfont_dir" ]; then
-            zip -r -q "${webfont_dir}.zip" "$webfont_dir"
-          fi
 
       - uses: actions/upload-artifact@v6
         with:
@@ -339,20 +384,5 @@ jobs:
       - name: Create release and upload archives
         if: startsWith(github.ref, 'refs/tags/v')
         run: gh release create "${{ github.ref_name }}" build/release/*.zip
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      # Replace the webfonts branch with a single orphan commit (served by
-      # GitHub Pages; too large for jsDelivr). Older versions stay in releases.
-      - name: Publish webfonts branch
-        if: startsWith(github.ref, 'refs/tags/v') && !inputs.debug
-        run: |
-          cd build/release/PlemoCJK_webfont_*/
-          git init -q -b webfonts
-          git add -A
-          git -c user.name="github-actions[bot]" \
-              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -q -m "Publish webfonts ${{ github.ref_name }} (${GITHUB_SHA::7})"
-          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" webfonts
         env:
           GH_TOKEN: ${{ github.token }}

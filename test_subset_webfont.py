@@ -137,13 +137,13 @@ class WebfontTests(unittest.TestCase):
                 for region in webfont.REGION_TO_GOOGLE_FONT:
                     self.make_font(root / f"PlemoCJK-{region}-{style}.ttf", weight, italic)
             self.make_font(root / "PlemoCJK-Term-SC-Bold.ttf", 700)
-            with patch("sys.argv", ["subset_webfont.py", str(root)]), \
+            with patch("sys.argv", ["subset_webfont.py", str(root), "--variant", "default"]), \
                  patch.object(webfont, "load_slices", return_value=["U+41,U+4E00", "U+20-7F"]):
                 webfont.main()
             version = webfont.read_ini()["version"]
             webfont_dir = root / "release" / f"PlemoCJK_webfont_{version}"
             for name in ["LICENSE", "licenses/LICENSE_IBM-Plex", "licenses/LICENSE_Hack",
-                         "README.md", ".nojekyll"]:
+                         "README.md"]:
                 self.assertTrue((webfont_dir / name).exists(), name)
             manifest = json.loads((webfont_dir / "manifest.json").read_text())
             for region, fonts in manifest["regions"].items():
@@ -172,6 +172,27 @@ class WebfontTests(unittest.TestCase):
                 default = css_rules((webfont_dir / f"PlemoCJK-{region}.css").read_text())
                 self.assertEqual({(w, s) for w, s, _, _ in default},
                                  {(400, "normal"), (700, "normal"), (400, "italic"), (700, "italic")})
+
+    def test_variant_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for region in webfont.REGION_TO_GOOGLE_FONT:
+                self.make_font(root / f"PlemoCJK-Term-{region}-Regular.ttf")
+            with patch("sys.argv", ["subset_webfont.py", str(root)]), \
+                 patch.object(webfont, "load_slices", return_value=["U+41,U+4E00", "U+20-7F"]):
+                webfont.main()
+            version = webfont.read_ini()["version"]
+            out = root / "release" / f"PlemoCJK-Term_webfont_{version}"
+            self.assertEqual([p.name for p in (root / "release").iterdir()], [out.name])
+            css = (out / "PlemoCJK-Term-SC.css").read_text()
+            self.assertIn("font-family: 'PlemoCJK Term SC'", css)
+            self.assertIn("url('Term-SC/PlemoCJK-Term-SC-Regular.1.woff2')", css)
+            self.assertTrue((out / "PlemoCJK-Term-KR-Regular.css").exists())
+            manifest = json.loads((out / "manifest.json").read_text())
+            self.assertEqual(manifest["variant"], "Term")
+            self.assertTrue(all((out / i["file"]).exists()
+                                for fonts in manifest["regions"].values()
+                                for e in fonts for i in e["files"]))
 
     def test_split_ascii_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

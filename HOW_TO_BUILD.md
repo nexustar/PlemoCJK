@@ -130,25 +130,31 @@ docker run --rm -e DEBUG=1 -v "$(pwd):/work" ghcr.io/yuru7/composite-font-builde
 
 ```bash
 pip install "fonttools==4.63.0" brotli
-python3 subset_webfont.py build
+python3 subset_webfont.py build                    # every built variant
+python3 subset_webfont.py build --variant Term     # one variant
 ```
 
-Converts all built default-variant weights and italics; each style must have
+Converts all built weights and italics of each variant; each style must have
 SC/TC/JP/KR inputs. Regular-only builds also work. Output in
-`build/release/PlemoCJK_webfont_VERSION/`, per region (likewise TC/JP/KR):
+`build/release/PlemoCJK_webfont_VERSION/` (default) and
+`PlemoCJK-Term_webfont_VERSION/` etc., per region (likewise TC/JP/KR):
 
-- `PlemoCJK-SC.css`: Regular, Bold and their italics
+- `PlemoCJK-SC.css` / `PlemoCJK-Term-SC.css`: Regular, Bold and their italics
 - `PlemoCJK-SC-Light.css` etc.: one style each
-- `SC/`: WOFF2 slices
+- `SC/` / `Term-SC/`: WOFF2 slices
 
-Use `font-family: "PlemoCJK SC", monospace` and select weight/style in CSS.
+Use `font-family: "PlemoCJK SC", monospace` (or `"PlemoCJK Term SC"`) and
+select weight/style in CSS.
 
 Subsets retain full character coverage and Google's range priority.
 Characters outside Google's ranges go into slices declared first with a
 single span each; later Google slices win where spans overlap. The output
 also carries licenses, a README and `manifest.json` (source and WOFF2 hashes).
 
-On `v`-prefixed tags the Action packages webfonts into the release and, for
-full builds, force-pushes them as a single orphan commit to the `webfonts`
-branch. Serve that branch with GitHub Pages (Settings → Pages → branch
-`webfonts`, `/`); at ~400 MB it exceeds jsDelivr's 50 MB limit.
+`npm_packages.py WEBFONT_DIR OUT_DIR` turns one variant's output into an npm
+package per region (`plemocjk-sc`, `plemocjk-term-sc`, ...).
+
+Webfonts ship only on npm. On `v`-prefixed tags the Action converts each
+variant on its own runner, builds the packages and publishes them with npm
+trusted publishing (full builds only). Each package on npmjs.com must list
+`nexustar/PlemoCJK`, workflow `build.yml`, as its trusted publisher.

@@ -15,6 +15,7 @@ Called after fonttools_script.py has built each region's TTF. Steps:
    "instructions may depend on point size" bit in head.flags.
    Not applied to 3:5-width variants because 5 * half_px == 3 * full_px
    has no integer solution.
+7. Set head.fontRevision from the build version (v0.0.4 -> 0.004).
 
 Can be run standalone on any TTF:
     python3 plemocjk_metadata.py build/PlemoCJK-Console-SC-Regular.ttf SC ConsoleSC Regular
@@ -108,6 +109,14 @@ def set_name_table(
     name.names.sort(key=lambda r: (r.platformID, r.platEncID, r.langID, r.nameID))
 
 
+def font_revision(version: str) -> float:
+    """v1.2.3 -> 1.203, the x.yyy form fontRevision is shown in."""
+    major, minor, patch = (int(n) for n in version.removeprefix("v").split("."))
+    if minor > 9 or patch > 99:
+        raise ValueError(f"{version} does not fit fontRevision x.yyy")
+    return major + minor / 10 + patch / 1000
+
+
 def set_meta_table(font: TTFont, config: plemocjk_config.Config, region: str) -> None:
     region_obj = config.regions[region]
     meta = table__m_e_t_a()
@@ -181,6 +190,7 @@ def apply(
     set_name_table(font, config, region, base_family, style)
     set_meta_table(font, config, region)
     set_os2(font, config, region)
+    font["head"].fontRevision = font_revision(config.version)
     if wmode == "12":
         add_hdmx(font, config, config.half_width_12)
     elif wmode == "36":

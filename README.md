@@ -36,22 +36,24 @@ Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
 
 ## Webfonts
 
-Each release publishes WOFF2 subsets of the default variant to the
-`webfonts` branch, served by GitHub Pages. `PlemoCJK-SC.css` covers Regular,
-Bold and their italics; other weights have their own stylesheet, such as
-`PlemoCJK-SC-Light.css`. Browsers download only the slices a page uses.
+WOFF2 subsets are published to npm, one package per variant and region:
+`plemocjk-sc`, `plemocjk-term-sc`, `plemocjk-natural-sc` (likewise `tc`, `jp`,
+`kr`). `PlemoCJK-SC.css` covers Regular, Bold and their italics; other
+weights have their own stylesheet, such as `PlemoCJK-SC-Light.css`. Browsers
+download only the slices a page uses.
 
 ```html
-<link rel="stylesheet" href="https://nexustar.github.io/PlemoCJK/PlemoCJK-SC.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.4/PlemoCJK-SC.css">
 <style>
   body { font-family: "PlemoCJK SC", monospace; }
   pre  { font-feature-settings: "hwid"; }  /* half-width box drawing, arrows… */
 </style>
 ```
 
-Replace `SC` with `TC`, `JP` or `KR` for other regions. Available weights:
-Thin, ExtraLight, Light, Regular, Text (450), Medium, SemiBold, Bold, each
-with an Italic.
+Or `npm install plemocjk-sc` and `import "plemocjk-sc";`. Term and Natural use
+`PlemoCJK-Term-SC.css` with family `"PlemoCJK Term SC"`, and so on. Available
+weights: Thin, ExtraLight, Light, Regular, Text (450), Medium, SemiBold, Bold,
+each with an Italic.
 
 ## Building
 

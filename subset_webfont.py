@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Generate default-variant WOFF2 subsets and per-region CSS for all built styles.
+"""Generate per-region WOFF2 subsets and CSS for each built variant.
 
-Usage: python3 subset_webfont.py [BUILD_DIR] (default: build)
-Requires fonttools and brotli. Google ranges are cached in .webfont_cache/.
+Usage: python3 subset_webfont.py [BUILD_DIR] [--variant NAME ...]
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -24,7 +24,7 @@ from fontTools import subset
 from fontTools import version as fonttools_version
 from fontTools.ttLib import TTFont
 
-from plemocjk_config import ALL_STYLES
+from plemocjk_config import ALL_STYLES, VARIANTS, hyphenate_tag
 
 REGION_TO_GOOGLE_FONT = {
     "SC": "Noto+Sans+SC",
@@ -166,10 +166,18 @@ def read_ini() -> dict[str, str]:
     return dict(config["DEFAULT"])
 
 
-def find_input_font(build_dir: Path, font_name: str, region: str, style: str) -> Path | None:
+def file_tag(variant: str, region: str) -> str:
+    """Output tag of a variant/region pair, e.g. 'SC' or 'Term-SC'."""
+    return hyphenate_tag(VARIANTS[variant].tag(region))
+
+
+def find_input_font(
+    build_dir: Path, font_name: str, region: str, style: str, variant: str = "default"
+) -> Path | None:
+    tag = file_tag(variant, region)
     candidates = [
-        f"{font_name}-{region}-{style}.ttf",
-        f"{font_name}{region}-{style}.ttf",
+        f"{font_name}-{tag}-{style}.ttf",
+        f"{font_name}{tag.replace('-', '')}-{style}.ttf",
     ]
     for name in candidates:
         ttf = build_dir / name
@@ -181,20 +189,19 @@ def find_input_font(build_dir: Path, font_name: str, region: str, style: str) ->
     return None
 
 
-def find_inputs(build_dir: Path, font_name: str) -> dict[str, list[Path]]:
+def find_inputs(build_dir: Path, font_name: str, variant: str = "default") -> dict[str, list[Path]]:
+    """Input fonts per region for VARIANT; empty when none are built."""
     inputs = {region: [] for region in REGION_TO_GOOGLE_FONT}
     for style in ALL_STYLES:
-        fonts = {r: find_input_font(build_dir, font_name, r, style) for r in inputs}
+        fonts = {r: find_input_font(build_dir, font_name, r, style, variant) for r in inputs}
         if not any(fonts.values()):
             continue
         missing = [r for r, path in fonts.items() if path is None]
         if missing:
-            raise SystemExit(f"ERROR: missing {style} input fonts: {', '.join(missing)}")
+            raise SystemExit(f"ERROR: missing {variant} {style} input fonts: {', '.join(missing)}")
         for region, path in fonts.items():
             inputs[region].append(path)
-    if not any(inputs.values()):
-        raise SystemExit("ERROR: no default-variant input fonts found")
-    return inputs
+    return inputs if any(inputs.values()) else {}
 
 
 def generate_css(
@@ -228,16 +235,17 @@ def process_region(
     webfont_dir: Path,
     font_name: str,
     pool: Executor | None = None,
+    variant: str = "default",
 ) -> list[dict]:
-    """Write per-style CSS and the default CSS to WEBFONT_DIR, slices to WEBFONT_DIR/<region>/.
-
-    Slices are converted on POOL when given. Returns manifest entries.
-    """
+    """Write CSS to WEBFONT_DIR and slices to WEBFONT_DIR/<tag>/ (SC, Term-SC);
+    return manifest entries."""
     ranges = load_slices(region)
     webfont_dir.mkdir(parents=True, exist_ok=True)
-    font_dir = webfont_dir / region
+    tag = file_tag(variant, region)
+    family = VARIANTS[variant].family_name(font_name, region)
+    font_dir = webfont_dir / tag
     canonical = font_name.replace(" ", "")
-    css_name = f"{canonical}-{region}.css"
+    css_name = f"{canonical}-{tag}.css"
     style_css = {}
     default_rules = []
     expected = set()
@@ -267,11 +275,11 @@ def process_region(
                 name = f"{input_ttf.stem}.{idx}.woff2"
                 jobs.append((input_ttf, staging / name, group))
                 names.append(name)
-                css_slices.append((idx, urange, f"{region}/{name}"))
+                css_slices.append((idx, urange, f"{tag}/{name}"))
             expected.update(names)
-            rule = generate_css(f"{font_name} {region}", css_slices, weight, style)
+            rule = generate_css(family, css_slices, weight, style)
             style_name = input_ttf.stem.rsplit("-", 1)[1]
-            style_css[f"{canonical}-{region}-{style_name}.css"] = rule
+            style_css[f"{canonical}-{tag}-{style_name}.css"] = rule
             if style_name in DEFAULT_CSS_STYLES:
                 default_rules.append(rule)
             entries.append({
@@ -280,13 +288,13 @@ def process_region(
                 "weight": weight,
                 "style": style,
                 "codepoints": len(points),
-                "css": f"{canonical}-{region}-{style_name}.css",
+                "css": f"{canonical}-{tag}-{style_name}.css",
                 "files": names,
             })
         run_jobs(jobs, pool)
         for entry in entries:
             entry["files"] = [
-                {"file": f"{region}/{name}", "sha256": sha256(staging / name)}
+                {"file": f"{tag}/{name}", "sha256": sha256(staging / name)}
                 for name in entry["files"]
             ]
             print(f"  {entry['source']}: {len(entry['files'])} slices, {entry['codepoints']} codepoints")
@@ -301,7 +309,7 @@ def process_region(
         # CSS used to live inside the region directory.
         (font_dir / css_name).unlink(missing_ok=True)
         for old_style in ALL_STYLES:
-            for stem in (f"{canonical}-{region}-{old_style}", f"{canonical}{region}-{old_style}"):
+            for stem in (f"{canonical}-{tag}-{old_style}", f"{canonical}{tag.replace('-', '')}-{old_style}"):
                 for path in font_dir.glob(f"{stem}.*.woff2"):
                     if path.name not in expected:
                         path.unlink()
@@ -328,7 +336,9 @@ def run_jobs(jobs: list[tuple[Path, Path, set[int]]], pool: Executor | None) -> 
         raise
 
 
-def write_extras(webfont_dir: Path, font_name: str, version: str, manifest: dict) -> None:
+def write_extras(
+    webfont_dir: Path, font_name: str, version: str, manifest: dict, variant: str = "default"
+) -> None:
     """Add licenses, a usage README and a hash manifest for standalone publishing."""
     root = Path(__file__).parent
     shutil.copy2(root / "LICENSE", webfont_dir / "LICENSE")
@@ -336,17 +346,16 @@ def write_extras(webfont_dir: Path, font_name: str, version: str, manifest: dict
     licenses.mkdir(exist_ok=True)
     for src, name in LICENSES.items():
         shutil.copy2(root / src, licenses / name)
-    (webfont_dir / ".nojekyll").touch()
-    family = f"{font_name} SC"
-    canonical = font_name.replace(" ", "")
+    family = VARIANTS[variant].family_name(font_name, "SC")
+    css = f"{font_name.replace(' ', '')}-{file_tag(variant, 'SC')}"
     (webfont_dir / "README.md").write_text(
-        f"# {font_name} webfonts {version}\n\n"
-        f"Default variant for SC / TC / JP / KR. `{canonical}-SC.css` holds Regular,\n"
-        f"Bold and their italics; `{canonical}-SC-Light.css` and the like hold one\n"
+        f"# {family.replace(' SC', '')} webfonts {version}\n\n"
+        f"{variant} variant for SC / TC / JP / KR. `{css}.css` holds Regular,\n"
+        f"Bold and their italics; `{css}-Light.css` and the like hold one\n"
         "style each. Browsers load only the slices a page uses.\n\n"
         "```html\n"
-        f'<link rel="stylesheet" href="{canonical}-SC.css">\n'
-        f'<link rel="stylesheet" href="{canonical}-SC-Light.css">\n'
+        f'<link rel="stylesheet" href="{css}.css">\n'
+        f'<link rel="stylesheet" href="{css}-Light.css">\n'
         f"<style>code, pre {{ font-family: '{family}', monospace; }}</style>\n"
         "```\n\n"
         "Replace SC with TC, JP or KR for regional glyph forms. `manifest.json`\n"
@@ -361,33 +370,47 @@ def main():
     ini = read_ini()
     font_name = ini.get("font_name", "PlemoCJK")
     version = ini.get("version", "dev")
-    build_dir = (
-        Path(sys.argv[1])
-        if len(sys.argv) > 1
-        else Path(ini.get("build_fonts_dir", "build"))
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("build_dir", nargs="?", default=ini.get("build_fonts_dir", "build"))
+    parser.add_argument("--variant", action="append", choices=list(VARIANTS),
+                        help="variant to convert (repeatable; default: every built one)")
+    args = parser.parse_args()
+    build_dir = Path(args.build_dir)
 
     if not build_dir.exists():
         print(f"ERROR: {build_dir} not found", file=sys.stderr)
         sys.exit(1)
 
     canonical = font_name.replace(" ", "")
-    webfont_dir = build_dir / "release" / f"{canonical}_webfont_{version}"
-    print(f"Output: {webfont_dir}")
+    inputs = {v: find_inputs(build_dir, canonical, v) for v in args.variant or VARIANTS}
+    if args.variant:
+        missing = [v for v, found in inputs.items() if not found]
+        if missing:
+            raise SystemExit(f"ERROR: no input fonts for variant(s): {', '.join(missing)}")
+    inputs = {v: found for v, found in inputs.items() if found}
+    if not inputs:
+        raise SystemExit("ERROR: no input fonts found")
 
-    inputs = find_inputs(build_dir, canonical)
-    manifest = {
-        "version": version,
-        "commit": os.environ.get("GITHUB_SHA") or git_commit(),
-        "fonttools": fonttools_version,
-        "regions": {},
-    }
     with ProcessPoolExecutor(os.cpu_count()) as pool:
-        for region, ttfs in inputs.items():
-            manifest["regions"][region] = process_region(region, ttfs, webfont_dir, font_name, pool)
-    write_extras(webfont_dir, font_name, version, manifest)
-
-    print(f"\n### Done: {webfont_dir} ###")
+        for variant, regions in inputs.items():
+            label = VARIANTS[variant].label
+            webfont_dir = build_dir / "release" / (
+                f"{canonical}-{label}_webfont_{version}" if label else f"{canonical}_webfont_{version}"
+            )
+            print(f"Output: {webfont_dir}")
+            manifest = {
+                "version": version,
+                "variant": variant,
+                "commit": os.environ.get("GITHUB_SHA") or git_commit(),
+                "fonttools": fonttools_version,
+                "regions": {},
+            }
+            for region, ttfs in regions.items():
+                manifest["regions"][region] = process_region(
+                    region, ttfs, webfont_dir, font_name, pool, variant
+                )
+            write_extras(webfont_dir, font_name, version, manifest, variant)
+            print(f"\n### Done: {webfont_dir} ###")
 
 
 if __name__ == "__main__":
