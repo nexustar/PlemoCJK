@@ -31,6 +31,11 @@ e.g. CSS `font-feature-settings: "hwid"`. It leaves already-half glyphs
 untouched. Use it where text must line up with terminal column widths, such as
 command-line output in code blocks.
 
+In every variant, the `ss16` stylistic set makes box drawing (│ ┌ ╔ …) and
+block elements (█ ▀ ░ …) join across lines at a line height of 1.6
+(`line-height: 1.6` in CSS) instead of the font's own 1.25. It combines with
+`hwid`: `font-feature-settings: "hwid", "ss16"`.
+
 Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
 `PlemoCJK Natural SC`, with file `PlemoCJK-Natural-SC-Regular.ttf`.
 

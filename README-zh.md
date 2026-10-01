@@ -32,6 +32,10 @@ ASCII 部分的观感与 PlemolJP 一致。
 例如 CSS `font-feature-settings: "hwid"`；已是半角的字形不受影响。需要和终端列宽对齐时
 使用，例如代码块里的命令行输出。
 
+所有变体都提供 `ss16` 风格集：开启后制表符（│ ┌ ╔ 等）和块元素（█ ▀ ░ 等）按 1.6 的
+行高（CSS `line-height: 1.6`）上下相接，而不是字体自身的 1.25。可与 `hwid` 同时使用：
+`font-feature-settings: "hwid", "ss16"`。
+
 Natural 使用西文与 CJK 字宽 3:5 的比例。例如简中字体族名为
 `PlemoCJK Natural SC`，文件名为 `PlemoCJK-Natural-SC-Regular.ttf`。
 

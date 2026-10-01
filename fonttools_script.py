@@ -151,7 +151,7 @@ def add_hinting(input_font_path, output_font_path, width_mode, style):
 
 def add_hwid_feature(font):
     """Add a hwid feature mapping each cmap glyph to its narrower uniXXXX.hw
-    alternate, appended to GSUB (feaLib would replace the whole table)."""
+    alternate."""
     cmap = font.getBestCmap()
     advance = font["hmtx"].metrics
     mapping = {}
@@ -162,6 +162,33 @@ def add_hwid_feature(font):
         base = cmap.get(int(mo.group(1), 16))
         if base and base != name and advance[base][0] > advance[name][0]:
             mapping[base] = name
+    append_gsub_feature(font, "hwid", mapping)
+
+
+def add_ss16_feature(font):
+    """Add an ss16 feature mapping each cmap glyph and .hw alternate to its
+    uniXXXX[.hw].ss16 form (box drawing / block elements for a taller line).
+    Must run after add_hwid_feature so that hwid + ss16 reaches .hw.ss16."""
+    cmap = font.getBestCmap()
+    glyphs = set(font.getGlyphOrder())
+    mapping = {}
+    for name in font.getGlyphOrder():
+        mo = re.match(r"^uni([0-9A-Fa-f]{4,6})(\.hw)?\.ss16$", name)
+        if not mo:
+            continue
+        if mo.group(2):
+            base = f"uni{mo.group(1)}.hw"
+            base = base if base in glyphs else None
+        else:
+            base = cmap.get(int(mo.group(1), 16))
+        if base and base != name:
+            mapping[base] = name
+    append_gsub_feature(font, "ss16", mapping)
+
+
+def append_gsub_feature(font, tag, mapping):
+    """Append a single-substitution feature to GSUB under every script and
+    language (feaLib would replace the whole table)."""
     if not mapping or "GSUB" not in font:
         return
 
@@ -176,7 +203,7 @@ def add_hwid_feature(font):
     feature.LookupListIndex = [lookup_index]
     feature.LookupCount = 1
     record = otTables.FeatureRecord()
-    record.FeatureTag = "hwid"
+    record.FeatureTag = tag
     record.Feature = feature
     gsub.FeatureList.FeatureRecord.append(record)
     feature_index = len(gsub.FeatureList.FeatureRecord) - 1
@@ -211,8 +238,9 @@ def merge_fonts(style, variant, eng_variant=None):
     # フォントを結合
     merger = merge.Merger()
     merged_font = merger.merge([eng_font_path, jp_font_path])
-    # PlemoCJK: hwid for non-console variants
+    # PlemoCJK: hwid for non-console variants, ss16 for all
     add_hwid_feature(merged_font)
+    add_ss16_feature(merged_font)
     merged_font.save(
         f"{BUILD_FONTS_DIR}/{FONTTOOLS_PREFIX}{FONT_NAME}{variant}-{style}_merged.ttf"
     )

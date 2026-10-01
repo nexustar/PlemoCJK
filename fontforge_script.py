@@ -46,6 +46,11 @@ FULL_WIDTH_35 = int(settings.get("DEFAULT", "FULL_WIDTH_35"))
 FULL_WIDTH_36 = int(settings.get("DEFAULT", "FULL_WIDTH_36"))
 WIDTH_36_STR = settings.get("DEFAULT", "WIDTH_36_STR")
 ITALIC_ANGLE = int(settings.get("DEFAULT", "ITALIC_ANGLE"))
+TALL_LINE_HEIGHT = int(settings.get("DEFAULT", "TALL_LINE_HEIGHT"))
+# how far solid block ink reaches past the line edges
+BLOCK_OVERSHOOT = 50
+# shade (░▒▓) grid rows per typo line; taller lines keep at least this row height
+SHADE_ROWS = 8
 
 COPYRIGHT = """[IBM Plex]
 Copyright (c) 2017 IBM Corp. https://github.com/IBM/plex
@@ -387,17 +392,18 @@ def generate_font(jp_style, eng_style, merged_style):
         # block elements (skip the ░▒▓ shades)
         snapshot_hw_forms(eng_font, 0x2580, 0x259F, skip=range(0x2591, 0x2594))
         # half shades, as in Term
-        apply_shade_blocks(eng_font, merged_style, eng_font[0x0030].width, doubled=False)
+        apply_shade_blocks(eng_font, eng_font[0x0030].width)
         snapshot_hw_forms(eng_font, 0x2591, 0x2593)
         # box drawing to full width
         make_box_drawing_full_width(eng_font, jp_font)
         # block elements to full width
         make_block_elements_full_width(eng_font, jp_font[0x3042].width)
-        # shades ░▒▓: Hack squares, doubled to fill the full cell
-        apply_shade_blocks(eng_font, merged_style, jp_font[0x3042].width, doubled=True)
+        # shades ░▒▓ redrawn for the full cell
+        apply_shade_blocks(eng_font, jp_font[0x3042].width)
     else:
         # console: half-width shades
-        apply_shade_blocks(eng_font, merged_style, eng_font[0x0030].width, doubled=False)
+        apply_shade_blocks(eng_font, eng_font[0x0030].width)
+    overshoot_block_sides(eng_font)
 
     # 全角スペースを可視化する
     if not options.get("hidden-zenkaku-space"):
@@ -430,6 +436,9 @@ def generate_font(jp_style, eng_style, merged_style):
 
     if not options.get("console"):
         prune_hw_alternates(eng_font, jp_font)
+
+    # ss16: box drawing / block elements for a taller line height
+    add_tall_line_forms(eng_font, jp_font)
 
     # macOSでのpostテーブルの使用性エラー対策
     # 重複するグリフ名を持つグリフをリネームする
@@ -1047,8 +1056,9 @@ def make_box_drawing_full_width(eng_font, jp_font):
 
 def fit_block_line_height(eng_font):
     """Fit the solid Block Elements (U+2580-259F; ░▒▓ shades are done in
-    apply_shade_blocks) to exactly the typo/hhea line box so they fill one line
-    and tile down with no gap. Mono draws them ~1300 tall (its own line);
+    apply_shade_blocks) to the typo/hhea line box so they fill one line and
+    tile down with no gap; ink on the line edges then overshoots them by
+    BLOCK_OVERSHOOT. Mono draws them ~1300 tall (its own line);
     transform_half_width leaves ~1262. One linear y-map keyed on U+2588 keeps the
     fractions (█ full, ▄/▀ halves, eighths). Both variants."""
     fb = eng_font[0x2588].boundingBox()
@@ -1064,7 +1074,48 @@ def fit_block_line_height(eng_font):
             continue
         glyph.transform(psMat.scale(1, sy))
         glyph.transform(psMat.translate(0, dy))
+        overshoot_line_edges(glyph, ty0, ty1)
     eng_font.selection.none()
+
+
+def overshoot_block_sides(eng_font):
+    """Push the solid Block Elements' ink on the cell sides out by
+    BLOCK_OVERSHOOT (same reason as overshoot_line_edges, for horizontal
+    neighbours); also their .hw forms. Run after the final widths."""
+    glyphs = []
+    for cp in range(0x2580, 0x25A0):
+        if 0x2591 <= cp <= 0x2593:
+            continue
+        for key in (cp, f"uni{cp:04X}.hw"):
+            try:
+                glyph = eng_font[key]
+            except (TypeError, KeyError, ValueError):
+                continue
+            if glyph.isWorthOutputting():
+                glyphs.append(glyph)
+    o = BLOCK_OVERSHOOT
+    for glyph in glyphs:
+        w = glyph.width
+        # Mono's own slight overhang (default's left/right halves stick out
+        # ~18) is folded into the same overshoot
+        remap_glyph(
+            glyph,
+            lambda x, y: (
+                -o if -o < x < 1 else w + o if w - 1 < x < w + o else x,
+                y,
+            ),
+        )
+
+
+def overshoot_line_edges(glyph, y0, y1):
+    """Push outline points on the line edges y0 / y1 out by BLOCK_OVERSHOOT,
+    so solid ink of adjacent lines overlaps instead of leaving an
+    antialiasing hairline where the edge falls between pixels."""
+    remap_glyph_y(
+        glyph,
+        lambda y: y0 - BLOCK_OVERSHOOT if abs(y - y0) < 1
+        else y1 + BLOCK_OVERSHOOT if abs(y - y1) < 1 else y,
+    )
 
 
 def make_block_elements_full_width(eng_font, full_width):
@@ -1090,51 +1141,212 @@ def make_block_elements_full_width(eng_font, full_width):
     eng_font.selection.none()
 
 
-def apply_shade_blocks(eng_font, style, target_width, doubled):
-    """Replace the shade blocks ░▒▓ (U+2591-2593) with Hack's square
-    checkerboard (Mono's are round dots that stretch to ovals in a wider cell;
-    Hack is already a source). Each is stretched to fill U+2588's width and the
-    typo/hhea line box, so shades match the solids and tile seamlessly -- the
-    dots go non-square, but filling the cell matters more for a texture.
-    doubled=True (full cell) first tiles two copies side by side so the full
-    cell keeps the half cell's pattern density."""
-    tb = eng_font[0x2588].boundingBox()  # solid block = the horizontal reference
-    tx0, tx1 = tb[0], tb[2]
-    ty0, ty1 = -TYPO_DESCENT, TYPO_ASCENT  # exactly one line high
-    tw, th = tx1 - tx0, ty1 - ty0
-    if tw <= 0 or th <= 0:
-        return
-    hack_style = "Bold" if "Bold" in style else "Regular"
-    hack = fontforge.open(f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", hack_style))
-    hack.em = EM_ASCENT + EM_DESCENT
+def apply_shade_blocks(eng_font, target_width):
+    """Draw the shade blocks ░▒▓ (U+2591-2593) at target_width over the
+    typo/hhea line box (see draw_shade)."""
     for cp in (0x2591, 0x2592, 0x2593):
+        glyph = eng_font[cp]
+        glyph.width = target_width
+        draw_shade(glyph, cp, eng_font[0x0030].width, -TYPO_DESCENT, TYPO_ASCENT + TYPO_DESCENT)
+    eng_font.selection.none()
+
+
+def draw_shade(glyph, cp, half_width, y0, height):
+    """Redraw ░▒▓ on one grid shared by all three, so they line up with
+    each other: columns an eighth of the half-width cell (a multiple of 4
+    per cell), rows at least 1/SHADE_ROWS of the typo line (rounded down to
+    an even count; shorter rows break up under hinting). ░ has a one-cell
+    dot every 4 columns, alternate rows shifted by 2 (25%, zigzag columns as
+    in Hack), ▒ a checkerboard of 2x1-cell squares (50%), ▓ the inverse of ░
+    (75%). These counts keep every phase continuous across cells and lines.
+    ░ and ▒ ink never crosses a line edge (only corners meet there), so
+    they stay inside the line: overlapping them would double the
+    antialiased edges into a darker band. ▓'s solid does cross, so it runs
+    BLOCK_OVERSHOOT on into the neighbouring line's own pattern."""
+    line = TYPO_ASCENT + TYPO_DESCENT
+    width = glyph.width
+    cols = max(4, 4 * round(width * 8 / half_width / 4))
+    rows = max(2, 2 * math.floor(height * SHADE_ROWS / line / 2))
+    cw, rh = width / cols, height / rows
+
+    def light(r, c):
+        return c % 4 == 2 * (r % 2)
+
+    quadratic = glyph.foreground.is_quadratic
+    layer = fontforge.layer()
+    layer.is_quadratic = quadratic
+
+    def rect(x0, x1, ry0, ry1, hole=False):
+        contour = fontforge.contour()
+        contour.is_quadratic = quadratic
+        points = [(x0, ry0), (x0, ry1), (x1, ry1), (x1, ry0)]
+        for i, (x, y) in enumerate(points[::-1] if hole else points):
+            if i:
+                contour.lineTo(x, y)
+            else:
+                contour.moveTo(x, y)
+        contour.closed = True
+        return contour
+
+    over = BLOCK_OVERSHOOT if cp == 0x2593 else 0
+    lo, hi = y0 - over, y0 + height + over
+    row_range = range(math.floor((lo - y0) / rh), math.ceil((hi - y0) / rh))
+    if cp == 0x2593:
+        # one solid with the ░ cells as holes: stacked bars would leave
+        # seams that hinting can split open. It overshoots the cell sides
+        # too, into the neighbouring cell's pattern. Holes stop 1 unit short
+        # of the outline so they stay inside it.
+        left, right = -over, width + over
+        layer += rect(left, right, lo, hi)
+        for r in row_range:
+            ry0, ry1 = max(y0 + r * rh, lo + 1), min(y0 + (r + 1) * rh, hi - 1)
+            if ry1 <= ry0:
+                continue
+            for c in range(math.floor(left / cw), math.ceil(right / cw)):
+                if light(r, c % cols):
+                    x0, x1 = max(c * cw, left + 1), min((c + 1) * cw, right - 1)
+                    if x1 > x0:
+                        layer += rect(x0, x1, ry0, ry1, hole=True)
+    else:
+        if cp == 0x2591:
+            dark = light
+        else:
+            dark = lambda r, c: (r + c // 2) % 2 == 0  # noqa: E731
+        for r in row_range:
+            ry0, ry1 = max(y0 + r * rh, lo), min(y0 + (r + 1) * rh, hi)
+            c = 0
+            while c < cols:  # one rectangle per run of dark cells
+                if not dark(r, c):
+                    c += 1
+                    continue
+                start = c
+                while c < cols and dark(r, c):
+                    c += 1
+                layer += rect(start * cw, c * cw, ry0, ry1)
+    glyph.foreground = layer
+    glyph.width = width
+
+
+def encoded_glyph(fonts, cp):
+    """The glyph that will be output for `cp` from the first font having it."""
+    for font in fonts:
         try:
-            g = hack[cp]
+            glyph = font[cp]
         except TypeError:
             continue
-        adv = g.width
-        if adv <= 0:
-            continue
-        if doubled:
-            fg = g.foreground
-            shifted = fg.dup()
-            shifted.transform(psMat.translate(adv, 0))
-            g.foreground = fg + shifted
-        b = g.boundingBox()
-        bw, bh = b[2] - b[0], b[3] - b[1]
-        if bw <= 0 or bh <= 0:
-            continue
-        g.transform(psMat.scale(tw / bw, th / bh))
-        b = g.boundingBox()
-        g.transform(psMat.translate(tx0 - b[0], ty0 - b[1]))
-        g.width = target_width
-        hack.selection.select(("unicode", None), cp)
-        hack.copy()
-        eng_font.selection.select(("unicode", None), cp)
-        eng_font.paste()
-        eng_font[cp].width = target_width
-    hack.close()
-    eng_font.selection.none()
+        if glyph.isWorthOutputting():
+            return glyph
+    return None
+
+
+def copy_to_new_glyph(src, name):
+    """Copy `src` into a new unencoded glyph `name` in the same font."""
+    font = src.font
+    dst = font.createChar(-1, name)
+    font.selection.select(("encoding", None), src.encoding)
+    font.copy()
+    font.selection.select(("encoding", None), dst.encoding)
+    font.paste()
+    font.selection.none()
+    dst.width = src.width
+    return dst
+
+
+def remap_glyph_y(glyph, fn):
+    """Move every outline point to y = fn(y)."""
+    remap_glyph(glyph, lambda x, y: (x, fn(y)))
+
+
+def remap_glyph(glyph, fn):
+    """Move every outline point to (x, y) = fn(x, y)."""
+    glyph.unlinkRef()
+    layer = glyph.foreground
+    for ci in range(len(layer)):
+        contour = layer[ci]
+        for pi in range(len(contour)):
+            point = contour[pi]
+            point.x, point.y = fn(point.x, point.y)
+            contour[pi] = point
+        layer[ci] = contour
+    glyph.foreground = layer
+
+
+def add_tall_line_forms(eng_font, jp_font):
+    """Add .ss16 alternates of box drawing and block elements (U+2500-259F,
+    and their .hw forms) that tile at line-height TALL_LINE_HEIGHT, which
+    CSS lays out as the typo line box plus equal half-leading above and below.
+    Blocks are mapped linearly onto that taller line box. Box drawing keeps
+    its horizontal strokes (the band of ━ and ═) and stretches only what lies
+    above/below them, so the stroke weight and double-line gaps stay; the
+    ink keeps its current overlap with the neighbouring lines. Vertical
+    dashes are scaled uniformly instead, so they stay evenly spaced. The
+    diagonals ╱╲╳ don't reach the line edges and are left as they are."""
+    fonts = (eng_font, jp_font)
+    extra = (TALL_LINE_HEIGHT - TYPO_ASCENT - TYPO_DESCENT) / 2
+    if extra <= 0:
+        return
+
+    def box_maps(heavy, double, vertical):
+        """y-maps for one box drawing set, from its ━ ═ │ glyphs."""
+        b0 = min(heavy.boundingBox()[1], double.boundingBox()[1])
+        b1 = max(heavy.boundingBox()[3], double.boundingBox()[3])
+        _, y0, _, y1 = vertical.boundingBox()  # ink extent of a full vertical
+        mid = (y0 + y1) / 2
+        uniform = (y1 - y0 + 2 * extra) / (y1 - y0)
+
+        def banded(y):
+            if y > b1:
+                return b1 + (y - b1) * (y1 + extra - b1) / (y1 - b1)
+            if y < b0:
+                return b0 - (b0 - y) * (b0 - y0 + extra) / (b0 - y0)
+            return y
+
+        return banded, lambda y: mid + (y - mid) * uniform
+
+    # block elements: the typo line box onto the tall line box
+    ty0, ty1 = -TYPO_DESCENT, TYPO_ASCENT
+    block_scale = (ty1 - ty0 + 2 * extra) / (ty1 - ty0)
+
+    def block_y(y):
+        if y < ty0:  # overshoot keeps its size
+            return y - extra
+        if y > ty1:
+            return y + extra
+        return ty0 - extra + (y - ty0) * block_scale
+
+    uniform_cps = {0x2506, 0x2507, 0x250A, 0x250B, 0x254E, 0x254F}
+    skip_cps = {0x2571, 0x2572, 0x2573}  # diagonals ╱╲╳: don't tile anyway
+
+    def add_set(glyph_for, suffix):
+        """glyph_for(cp) -> glyph or None; adds glyph name + suffix."""
+        refs = [glyph_for(cp) for cp in (0x2501, 0x2550, 0x2502)]
+        banded, uniform = box_maps(*refs) if None not in refs else (None, None)
+        for cp in range(0x2500, 0x25A0):
+            glyph = glyph_for(cp)
+            if glyph is None or cp in skip_cps:
+                continue
+            if 0x2591 <= cp <= 0x2593:
+                dst = copy_to_new_glyph(glyph, f"uni{cp:04X}{suffix}")
+                draw_shade(dst, cp, eng_font[0x0030].width, ty0 - extra, ty1 - ty0 + 2 * extra)
+                continue
+            if cp >= 0x2580:
+                fn = block_y
+            elif banded is None:
+                continue
+            else:
+                fn = uniform if cp in uniform_cps else banded
+            if all(fn(p.y) == p.y for c in glyph.foreground for p in c):
+                continue  # nothing reaches past the horizontal band (─ ═ ╴ …)
+            remap_glyph_y(copy_to_new_glyph(glyph, f"uni{cp:04X}{suffix}"), fn)
+
+    def hw_glyph(cp):
+        for font in fonts:
+            if f"uni{cp:04X}.hw" in font:
+                return font[f"uni{cp:04X}.hw"]
+        return None
+
+    add_set(lambda cp: encoded_glyph(fonts, cp), ".ss16")
+    add_set(hw_glyph, ".hw.ss16")
 
 
 def visualize_zenkaku_space(jp_font):
