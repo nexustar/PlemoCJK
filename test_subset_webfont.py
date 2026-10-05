@@ -54,6 +54,22 @@ class WebfontTests(unittest.TestCase):
         chosen = resolve(enumerate(u for _, u in slices), points)
         self.assertEqual(chosen, {0x3400: 0, 0x3401: 1, 0x3402: 0})
 
+    def test_styles_share_slice_boundaries(self):
+        regular = set(range(0x20000, 0x20300))
+        bold = (regular | {0x1F000}) - {0x20100}
+        ranges = ["U+20-7F"]
+        own = webfont.plan_slices(bold, ranges)
+        self.assertNotEqual(own[0][0], set(range(0x20000, 0x20100)))
+        universe = regular | bold | set(range(0x30000, 0x30100))
+        plans = [webfont.plan_slices(p, ranges, universe) for p in (regular, bold)]
+        for (r, _), (b, _) in zip(*plans):
+            self.assertLessEqual(r ^ b, {0x1F000, 0x20100})
+        self.assertEqual([len(p) for p in plans], [5, 5])
+        self.assertEqual(plans[0][4], (set(), ""))
+        self.assertEqual(plans[1][1], (set(range(0x200FF, 0x201FF)) - {0x20100}, "U+200FF-201FE"))
+        for points, plan in zip((regular, bold), plans):
+            self.assertEqual(set().union(*(g for g, _ in plan)), points)
+
     def test_missing_region_fails_before_conversion(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "PlemoCJK-SC-Regular.ttf").touch()

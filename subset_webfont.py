@@ -108,25 +108,33 @@ def format_codepoints(points: set[int]) -> str:
     )
 
 
-def plan_slices(points: set[int], ranges: list[str]) -> list[tuple[set[int], str]]:
+def plan_slices(
+    points: set[int], ranges: list[str], universe: set[int] | None = None
+) -> list[tuple[set[int], str]]:
     """Split POINTS into (codepoints, unicode-range) slices, in CSS order.
 
     Overlapping Google ranges resolve as CSS does (last rule wins), keeping
     Latin together. Characters outside them go into 256-codepoint slices
     placed first, so each can use a single span: later rules win wherever a
     span overlaps a Google slice.
+
+    Boundaries are drawn on UNIVERSE (default POINTS) so that styles with
+    different coverage share them; slices without POINTS come back empty.
     """
-    remaining = set(points)
+    remaining = set(points if universe is None else universe)
     groups = []
     for value in reversed(ranges):
         group = parse_codepoints(value) & remaining
         if group:
-            groups.append((group, format_codepoints(group)))
+            groups.append(group & points)
             remaining -= group
     groups.reverse()
     extra = sorted(remaining)
-    spans = [extra[i:i + 256] for i in range(0, len(extra), 256)]
-    return [(set(s), format_codepoints(set(range(s[0], s[-1] + 1)))) for s in spans] + groups
+    spans = [set(extra[i:i + 256]) & points for i in range(0, len(extra), 256)]
+    return [
+        (s, format_codepoints(set(range(min(s), max(s) + 1)))) if s else (s, "")
+        for s in spans
+    ] + [(g, format_codepoints(g)) for g in groups]
 
 
 def subset_font(input_ttf: Path, output_woff2: Path, points: set[int]) -> None:
@@ -255,6 +263,7 @@ def process_region(
     # Publish only after every style succeeds.
     with tempfile.TemporaryDirectory(prefix=f".{region}-", dir=webfont_dir) as tmp:
         staging = Path(tmp)
+        faces = []
         for input_ttf in input_ttfs:
             with TTFont(input_ttf) as font:
                 points = set(font.getBestCmap() or {})
@@ -262,7 +271,10 @@ def process_region(
                 style = "italic" if font["OS/2"].fsSelection & 1 else "normal"
             if not points:
                 raise RuntimeError(f"No Unicode cmap: {input_ttf}")
-            slices = plan_slices(points, ranges)
+            faces.append((input_ttf, points, weight, style))
+        universe = set().union(*(points for _, points, _, _ in faces))
+        for input_ttf, points, weight, style in faces:
+            slices = plan_slices(points, ranges, universe)
             groups = [group for group, _ in slices]
             if sum(map(len, groups)) != len(points) or set().union(*groups) != points:
                 raise RuntimeError(f"Slices do not partition the cmap: {input_ttf}")
@@ -272,6 +284,8 @@ def process_region(
             css_slices = []
             names = []
             for idx, (group, urange) in enumerate(slices, 1):
+                if not group:
+                    continue
                 name = f"{input_ttf.stem}.{idx}.woff2"
                 jobs.append((input_ttf, staging / name, group))
                 names.append(name)
