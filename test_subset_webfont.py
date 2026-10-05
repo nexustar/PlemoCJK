@@ -1,6 +1,8 @@
 """Regression checks for complete webfont coverage and CSS slice priority."""
 import json
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +13,7 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
+import npm_packages
 import subset_webfont as webfont
 
 
@@ -186,8 +189,35 @@ class WebfontTests(unittest.TestCase):
                             self.assertIn(cp, font.getBestCmap())
                 self.assertEqual(found, expected)
                 default = css_rules((webfont_dir / f"PlemoCJK-{region}.css").read_text())
-                self.assertEqual({(w, s) for w, s, _, _ in default},
-                                 {(400, "normal"), (700, "normal"), (400, "italic"), (700, "italic")})
+                self.assertEqual({(w, s) for w, s, _, _ in default}, expected)
+                self.assertEqual(len(default), 48)
+                # Interleaved slice by slice: each range is a run of every style.
+                ranges = [u for _, _, _, u in default]
+                self.assertEqual(ranges, [u for u in dict.fromkeys(ranges) for _ in expected])
+                for face in expected:
+                    urls = [url for w, s, url, _ in default if (w, s) == face]
+                    per_style = [url for style_name in webfont.ALL_STYLES for w, s, url, _ in css_rules(
+                        (webfont_dir / f"PlemoCJK-{region}-{style_name}.css").read_text()) if (w, s) == face]
+                    self.assertEqual(urls, per_style)
+            if shutil.which("node"):
+                self.check_npm_cli(webfont_dir, root / "npm", manifest)
+
+    def check_npm_cli(self, webfont_dir, out, manifest):
+        """The package's bin lays styles out exactly like the default CSS."""
+        pkg = npm_packages.build_package(webfont_dir, out, "SC", manifest, "PlemoCJK")
+        package = json.loads((pkg / "package.json").read_text())
+        cli = [shutil.which("node"), str(pkg / package["bin"]["plemocjk-sc"])]
+        run = lambda *args: subprocess.run(cli + list(args), capture_output=True, text=True)
+        merged = run(*webfont.ALL_STYLES)
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        self.assertEqual(merged.stdout, (pkg / "PlemoCJK-SC.css").read_text())
+        subset = css_rules(run("bold", "Regular", "bold").stdout)
+        self.assertEqual([w for w, _, _, _ in subset], [700, 400] * 3)
+        for args in ([], ["Heavy"]):
+            failed = run(*args)
+            self.assertEqual(failed.returncode, 1)
+            self.assertIn("Styles: Bold, BoldItalic, ", failed.stderr + failed.stdout)
+            self.assertEqual(failed.stdout, "")
 
     def test_variant_names(self):
         with tempfile.TemporaryDirectory() as tmp:

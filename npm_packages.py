@@ -21,6 +21,8 @@ REGIONS = {
     "KR": "Korean",
 }
 REPOSITORY = "nexustar/PlemoCJK"
+# Shipped as each package's `bin`: merges chosen styles into one stylesheet.
+CLI = "webfont_css.mjs"
 
 
 def link_or_copy(src: Path, dst: Path) -> None:
@@ -38,11 +40,20 @@ a monospaced programming font pairing IBM Plex Mono with IBM Plex Sans {region}.
 WOFF2 files are split into slices; browsers load only those a page uses.
 
 ```js
-// Regular, Bold and their italics
+// Every weight and italic
 import "{name}";
-// Any other style
+// Or a single style
 import "{name}/{css}-Light.css";
 ```
+
+To vendor a few styles as one stylesheet, laid out like the default one so it
+compresses well:
+
+```sh
+npx {name} Regular Bold Light > {css}-subset.css
+```
+
+Keep it next to a copy of `{region}/`; only the chosen styles' slices are needed.
 
 Or from a CDN:
 
@@ -80,6 +91,7 @@ def build_package(src: Path, out: Path, region: str, manifest: dict, font_name: 
     for entry in fonts:
         for item in entry["files"]:
             link_or_copy(src / item["file"], pkg / item["file"])
+    shutil.copy2(Path(__file__).parent / CLI, pkg / "cli.mjs")
     shutil.copy2(src / "LICENSE", pkg / "LICENSE")
     shutil.copytree(src / "licenses", pkg / "licenses")
     (pkg / "README.md").write_text(
@@ -95,13 +107,14 @@ def build_package(src: Path, out: Path, region: str, manifest: dict, font_name: 
         "license": "OFL-1.1",
         "main": default_css,
         "style": default_css,
+        "bin": {name: "cli.mjs"},
         "exports": {
             ".": f"./{default_css}",
             "./*.css": "./*.css",
             "./package.json": "./package.json",
         },
         "sideEffects": ["*.css"],
-        "files": ["*.css", f"{tag}/", "licenses/"],
+        "files": ["*.css", "cli.mjs", f"{tag}/", "licenses/"],
     }
     (pkg / "package.json").write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
     return pkg

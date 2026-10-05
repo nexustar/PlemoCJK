@@ -43,9 +43,9 @@ Natural uses a 3:5 Latin/CJK width ratio. For example, the SC family is
 
 WOFF2 subsets are published to npm, one package per variant and region:
 `plemocjk-sc`, `plemocjk-term-sc`, `plemocjk-natural-sc` (likewise `tc`, `jp`,
-`kr`). `PlemoCJK-SC.css` covers Regular, Bold and their italics; other
-weights have their own stylesheet, such as `PlemoCJK-SC-Light.css`. Browsers
-download only the slices a page uses.
+`kr`). `PlemoCJK-SC.css` covers every weight and italic; each style also
+has its own stylesheet, such as `PlemoCJK-SC-Light.css`. Browsers download only
+the slices a page uses.
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.4/PlemoCJK-SC.css">
@@ -59,6 +59,10 @@ Or `npm install plemocjk-sc` and `import "plemocjk-sc";`. Term and Natural use
 `PlemoCJK-Term-SC.css` with family `"PlemoCJK Term SC"`, and so on. Available
 weights: Thin, ExtraLight, Light, Regular, Text (450), Medium, SemiBold, Bold,
 each with an Italic.
+
+To vendor only some styles, `npx plemocjk-sc Regular Bold > PlemoCJK-SC-subset.css`
+prints one stylesheet for them, laid out like the default one so it compresses
+well. Put it next to a copy of the package's `SC/` directory.
 
 ## Building
 

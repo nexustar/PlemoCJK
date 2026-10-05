@@ -37,9 +37,6 @@ CACHE_DIR = Path(__file__).parent / ".webfont_cache"
 
 PRINTABLE_ASCII = set(range(0x20, 0x7F))
 
-# Styles in the regional default CSS; every style also gets its own CSS.
-DEFAULT_CSS_STYLES = ("Regular", "Bold", "Italic", "BoldItalic")
-
 # Source fonts of the default variant (no Nerd Fonts).
 LICENSES = {
     "source/LICENSE_IBM-Plex": "LICENSE_IBM-Plex",
@@ -212,15 +209,15 @@ def find_inputs(build_dir: Path, font_name: str, variant: str = "default") -> di
     return inputs if any(inputs.values()) else {}
 
 
-def generate_css(
+def font_face_rules(
     family_name: str,
     slices: list[tuple[int, str, str]],
     weight: int,
     style: str,
-) -> str:
-    rules = []
-    for idx, urange, filename in slices:
-        rules.append(
+) -> dict[int, str]:
+    """One @font-face rule per slice, keyed by slice index."""
+    return {
+        idx: (
             f"/* {idx} */\n"
             f"@font-face {{\n"
             f"  font-family: '{family_name}';\n"
@@ -230,6 +227,11 @@ def generate_css(
             f"  unicode-range: {urange};\n"
             f"}}"
         )
+        for idx, urange, filename in slices
+    }
+
+
+def join_rules(rules: list[str]) -> str:
     return "\n\n".join(rules) + "\n"
 
 
@@ -255,7 +257,7 @@ def process_region(
     canonical = font_name.replace(" ", "")
     css_name = f"{canonical}-{tag}.css"
     style_css = {}
-    default_rules = []
+    face_rules = []
     expected = set()
     entries = []
     jobs = []
@@ -291,11 +293,10 @@ def process_region(
                 names.append(name)
                 css_slices.append((idx, urange, f"{tag}/{name}"))
             expected.update(names)
-            rule = generate_css(family, css_slices, weight, style)
+            rules = font_face_rules(family, css_slices, weight, style)
             style_name = input_ttf.stem.rsplit("-", 1)[1]
-            style_css[f"{canonical}-{tag}-{style_name}.css"] = rule
-            if style_name in DEFAULT_CSS_STYLES:
-                default_rules.append(rule)
+            style_css[f"{canonical}-{tag}-{style_name}.css"] = join_rules(list(rules.values()))
+            face_rules.append(rules)
             entries.append({
                 "source": input_ttf.name,
                 "source_sha256": sha256(input_ttf),
@@ -312,7 +313,15 @@ def process_region(
                 for name in entry["files"]
             ]
             print(f"  {entry['source']}: {len(entry['files'])} slices, {entry['codepoints']} codepoints")
-        style_css[css_name] = "\n".join(default_rules or style_css.values())
+        # The regional CSS holds every style, interleaved slice by slice: the
+        # same unicode-range then repeats within gzip's 32 KB window. Slices of
+        # one style keep their order, which is what decides range priority.
+        style_css[css_name] = join_rules([
+            rules[idx]
+            for idx in sorted(set().union(*face_rules))
+            for rules in face_rules
+            if idx in rules
+        ])
         for name, css in style_css.items():
             (staging / name).write_text(css, encoding="utf-8")
         font_dir.mkdir(exist_ok=True)
@@ -364,12 +373,11 @@ def write_extras(
     css = f"{font_name.replace(' ', '')}-{file_tag(variant, 'SC')}"
     (webfont_dir / "README.md").write_text(
         f"# {family.replace(' SC', '')} webfonts {version}\n\n"
-        f"{variant} variant for SC / TC / JP / KR. `{css}.css` holds Regular,\n"
-        f"Bold and their italics; `{css}-Light.css` and the like hold one\n"
-        "style each. Browsers load only the slices a page uses.\n\n"
+        f"{variant} variant for SC / TC / JP / KR. `{css}.css` holds every\n"
+        f"weight and italic; `{css}-Light.css` and the like hold one style\n"
+        "each. Browsers load only the slices a page uses.\n\n"
         "```html\n"
         f'<link rel="stylesheet" href="{css}.css">\n'
-        f'<link rel="stylesheet" href="{css}-Light.css">\n'
         f"<style>code, pre {{ font-family: '{family}', monospace; }}</style>\n"
         "```\n\n"
         "Replace SC with TC, JP or KR for regional glyph forms. `manifest.json`\n"

@@ -139,7 +139,7 @@ SC/TC/JP/KR inputs. Regular-only builds also work. Output in
 `build/release/PlemoCJK_webfont_VERSION/` (default) and
 `PlemoCJK-Term_webfont_VERSION/` etc., per region (likewise TC/JP/KR):
 
-- `PlemoCJK-SC.css` / `PlemoCJK-Term-SC.css`: Regular, Bold and their italics
+- `PlemoCJK-SC.css` / `PlemoCJK-Term-SC.css`: every style, interleaved slice by slice so it gzips well
 - `PlemoCJK-SC-Light.css` etc.: one style each
 - `SC/` / `Term-SC/`: WOFF2 slices
 
@@ -152,7 +152,9 @@ single span each; later Google slices win where spans overlap. The output
 also carries licenses, a README and `manifest.json` (source and WOFF2 hashes).
 
 `npm_packages.py WEBFONT_DIR OUT_DIR` turns one variant's output into an npm
-package per region (`plemocjk-sc`, `plemocjk-term-sc`, ...).
+package per region (`plemocjk-sc`, `plemocjk-term-sc`, ...). Each ships
+`webfont_css.mjs` as its `bin`: `npx plemocjk-sc Regular Bold` prints one
+stylesheet for the chosen styles, interleaved like the default one.
 
 Webfonts ship only on npm. On `v`-prefixed tags the Action converts each
 variant on its own runner, builds the packages and publishes them with npm

@@ -42,8 +42,8 @@ Natural 使用西文与 CJK 字宽 3:5 的比例。例如简中字体族名为
 ## 网页字体
 
 WOFF2 分片发布在 npm 上，每个变体、每个地区一个包：`plemocjk-sc`、`plemocjk-term-sc`、
-`plemocjk-natural-sc`（`tc`、`jp`、`kr` 同理）。`PlemoCJK-SC.css` 包含 Regular、Bold 及其
-斜体；其他字重各有单独的 CSS，如 `PlemoCJK-SC-Light.css`。浏览器只下载页面用到的分片。
+`plemocjk-natural-sc`（`tc`、`jp`、`kr` 同理）。`PlemoCJK-SC.css` 包含全部字重及
+斜体；每个样式另有单独的 CSS，如 `PlemoCJK-SC-Light.css`。浏览器只下载页面用到的分片。
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.4/PlemoCJK-SC.css">
@@ -56,6 +56,9 @@ WOFF2 分片发布在 npm 上，每个变体、每个地区一个包：`plemocjk
 也可以 `npm install plemocjk-sc` 后 `import "plemocjk-sc";`。Term、Natural 用
 `PlemoCJK-Term-SC.css`，字体名 `"PlemoCJK Term SC"`，依此类推。可用字重：Thin、
 ExtraLight、Light、Regular、Text（450）、Medium、SemiBold、Bold，均有对应斜体。
+
+只想自托管部分样式时，`npx plemocjk-sc Regular Bold > PlemoCJK-SC-subset.css` 会输出
+只含这些样式的 CSS，排列方式与默认 CSS 相同，便于压缩。把它放在包内 `SC/` 目录副本的旁边即可。
 
 ## 构建
 
