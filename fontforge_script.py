@@ -1371,14 +1371,24 @@ def is_greek(cp):
 
 def merge_hack(jp_font, eng_font, style):
     """Hack フォントをマージする"""
-    if "Bold" in style:
-        hack_font = fontforge.open(
-            f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", "Bold")
-        )
-    else:
-        hack_font = fontforge.open(
-            f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", "Regular")
-        )
+    hack_style, other_style = (
+        ("Bold", "Regular") if "Bold" in style else ("Regular", "Bold")
+    )
+    hack_font = fontforge.open(
+        f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", hack_style)
+    )
+    # PlemoCJK: keep only what Hack Regular and Bold both cover
+    other_font = fontforge.open(
+        f"{SOURCE_FONTS_DIR}/" + HACK_FONT.replace("{style}", other_style)
+    )
+    other_unicodes = set()
+    for glyph in other_font.glyphs():
+        other_unicodes.add(glyph.unicode)
+        other_unicodes.update(u[0] for u in glyph.altuni or ())
+    other_font.close()
+    for glyph in hack_font.glyphs():
+        if glyph.unicode != -1 and glyph.unicode not in other_unicodes:
+            glyph.clear()
     hack_font.em = EM_ASCENT + EM_DESCENT
     # 既に英語フォント側に存在する場合はhackグリフは削除する
     for glyph in eng_font.glyphs():
