@@ -48,7 +48,7 @@ has its own stylesheet, such as `PlemoCJK-SC-Light.css`. Browsers download only
 the slices a page uses.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.4/PlemoCJK-SC.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.5/PlemoCJK-SC.css">
 <style>
   body { font-family: "PlemoCJK SC", monospace; }
   pre  { font-feature-settings: "hwid"; }  /* half-width box drawing, arrows… */

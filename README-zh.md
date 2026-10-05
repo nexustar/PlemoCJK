@@ -46,7 +46,7 @@ WOFF2 分片发布在 npm 上，每个变体、每个地区一个包：`plemocjk
 斜体；每个样式另有单独的 CSS，如 `PlemoCJK-SC-Light.css`。浏览器只下载页面用到的分片。
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.4/PlemoCJK-SC.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plemocjk-sc@0.0.5/PlemoCJK-SC.css">
 <style>
   body { font-family: "PlemoCJK SC", monospace; }
   pre  { font-feature-settings: "hwid"; }  /* 制表符、箭头等改为半角 */
