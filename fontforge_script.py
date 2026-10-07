@@ -1040,6 +1040,8 @@ def add_nerd_font_glyphs(jp_font, eng_font):
             f"{SOURCE_FONTS_DIR}/nerd-fonts/SymbolsNerdFont-Regular.ttf"
         )
         nerd_font.em = EM_ASCENT + EM_DESCENT
+        # ♥ のアイコンは半角幅に収まらないので取り込まない
+        nerd_font.removeGlyph(nerd_font[0x2665])
         glyph_names = set()
         for nerd_glyph in nerd_font.glyphs():
             # Nerd Fontsのグリフ名をユニークにするため接尾辞を付ける
