@@ -747,6 +747,15 @@ def set_width_600_or_1000(jp_font):
             # グリフ位置を調整してから幅を設定
             glyph.transform(psMat.translate((1000 - glyph.width) / 2, 0))
             glyph.width = 1000
+        elif glyph.width > 1000:
+            # 全角幅を超えるグリフも全角幅に揃える (字形が収まらない場合のみ縮小)
+            bbox = glyph.boundingBox()
+            ink_width = bbox[2] - bbox[0]
+            if ink_width > 1000:
+                glyph.transform(psMat.scale(1000 / ink_width, 1))
+                bbox = glyph.boundingBox()
+            glyph.transform(psMat.translate((1000 - (bbox[0] + bbox[2])) / 2, 0))
+            glyph.width = 1000
 
         # 500幅の場合は一旦 600 幅にする
         if glyph.width == 500:
